@@ -1,0 +1,12 @@
+{
+  "enchantment.qianmospeed.qianmo_swiftjourney": "Быстрое путешествие Цяньмо",
+  "enchantment.qianmospeed.qianmo_swiftjourney.desc": "Дает значительное увеличение скорости при ходьбе по дорогам",
+  
+  "qianmospeed.message.login.basic": "§6[Скорость Цяньмо] §fИнтеллектуальный базовый режим загружен (интервал: %s тиков)",
+  "qianmospeed.message.login.advanced": "§6[Скорость Цяньмо] §fРасширенный режим RoadWeaver включен",
+  
+  "qianmospeed.message.speed.applied": "§a+ Бонус скорости применен (уровень: %s)",
+  "qianmospeed.message.speed.removed": "§c- Бонус скорости удален",
+  
+  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver не обнаружен, используется базовый режим"
+}

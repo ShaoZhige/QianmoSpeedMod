@@ -1,0 +1,12 @@
+{
+  "enchantment.qianmospeed.qianmo_swiftjourney": "Qianmo Swift Journey",
+  "enchantment.qianmospeed.qianmo_swiftjourney.desc": "Grants significant speed boost when walking on roads",
+
+  "qianmospeed.message.login.basic": "§6[Qianmo Speed] §fIntelligent basic mode loaded (interval: %s ticks)",
+  "qianmospeed.message.login.advanced": "§6[Qianmo Speed] §fRoadWeaver advanced mode enabled",
+  
+  "qianmospeed.message.speed.applied": "§a+ Speed bonus applied (level: %s)",
+  "qianmospeed.message.speed.removed": "§c- Speed bonus removed",
+  
+  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver not detected, using basic mode"
+}

@@ -1,0 +1,12 @@
+{
+  "enchantment.qianmospeed.qianmo_swiftjourney": "阡陌疾行",
+  "enchantment.qianmospeed.qianmo_swiftjourney.desc": "喺道路上行走時獲得顯著嘅速度提升",
+  
+  "qianmospeed.message.login.basic": "§6[阡陌疾旅] §f智能基礎模式已加載 (間隔: %s ticks)",
+  "qianmospeed.message.login.advanced": "§6[阡陌疾旅] §fRoadWeaver進階模式已啟用",
+  
+  "qianmospeed.message.speed.applied": "§a+ 速度加成已應用 (等級: %s)",
+  "qianmospeed.message.speed.removed": "§c- 速度加成已移除",
+  
+  "qianmospeed.message.roadweaver.not_found": "§e未檢測到RoadWeaver，使用基礎模式"
+}
