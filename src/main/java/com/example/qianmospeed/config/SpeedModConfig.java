@@ -290,7 +290,6 @@ public class SpeedModConfig {
                         Arrays.asList(
                                 "minecraft:dirt_path",
                                 "minecraft:dirt",
-                                "minecraft:cobblestone",
                                 "minecraft:stone_bricks",
                                 "minecraft:sandstone",
                                 "minecraft:mud_bricks",
@@ -786,7 +785,6 @@ public class SpeedModConfig {
         advancedRoadBlockIds.addAll(Arrays.asList(
                 "minecraft:dirt_path",
                 "minecraft:dirt",
-                "minecraft:cobblestone",
                 "minecraft:stone_bricks",
                 "minecraft:sandstone",
                 "minecraft:mud_bricks",
@@ -850,4 +848,5 @@ public class SpeedModConfig {
                 "minecraft:mud",
                 "minecraft:muddy_mangrove_roots"));
     }
+
 }
