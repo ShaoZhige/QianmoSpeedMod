@@ -6,7 +6,7 @@ Qianmo Speed is a Minecraft mod inspired by Don't Starve that grants speed boost
 一个为Minecraft识别道路并提供速度加成的模组，灵感来源于《饥荒》的行走机制。
 
 ## 功能特性
-- 穿上"阡陌疾行"附魔靴子在路上行走获得速度加成
+- 穿上"旅行的祝福"附魔靴子在路上行走获得速度加成
 - 两种道路检测模式：基础模式与高级模式
 - 高度可配置的方块识别和速度调整
 - 支持多种语言本地化
