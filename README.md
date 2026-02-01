@@ -17,6 +17,8 @@ Qianmo Speed is a Minecraft mod inspired by Don't Starve that grants speed boost
 - 道路检测间隔 (10-200 ticks)
 - 道路方块列表
 - 消息提示开关
+- 道路检测模式
+- 组成道路的最大最小宽度
 
 ## 许可证
 MIT
