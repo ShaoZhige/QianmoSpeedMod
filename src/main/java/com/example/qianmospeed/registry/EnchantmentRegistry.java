@@ -12,13 +12,13 @@ public class EnchantmentRegistry {
     public static final DeferredRegister<Enchantment> ENCHANTMENTS = 
         DeferredRegister.create(ForgeRegistries.ENCHANTMENTS, QianmoSpeedMod.MODID);
     
-    public static final RegistryObject<Enchantment> QIANMO_SWIFTJOURNEY = ENCHANTMENTS.register(
-        "qianmo_swiftjourney",
-        QianmoSwiftjourneyEnchantment::new  // 使用无参构造函数引用
+    public static final RegistryObject<Enchantment> TRAVEL_BLESSINGS = ENCHANTMENTS.register(
+        "travel_blessings",
+        QianmoSwiftjourneyEnchantment::new
     );
     
     public static void register(IEventBus eventBus) {
         ENCHANTMENTS.register(eventBus);
-        QianmoSpeedMod.LOGGER.info("附魔注册完成");
+        QianmoSpeedMod.LOGGER.info("旅行的祝福附魔注册完成");
     }
 }

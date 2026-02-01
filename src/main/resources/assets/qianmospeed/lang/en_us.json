@@ -1,7 +1,7 @@
 {
-  "enchantment.qianmospeed.qianmo_swiftjourney": "Qianmo Swift Journey",
-  "enchantment.qianmospeed.qianmo_swiftjourney.desc": "Grants significant speed boost when walking on roads",
-
+  "enchantment.qianmospeed.travel_blessings": "Travel Blessings",
+  "enchantment.qianmospeed.travel_blessings.desc": "Grants significant speed boost when walking on roads",
+  
   "qianmospeed.message.login.basic": "§6[Qianmo Speed] §fIntelligent basic mode loaded (interval: %s ticks)",
   "qianmospeed.message.login.advanced": "§6[Qianmo Speed] §fRoadWeaver advanced mode enabled",
   

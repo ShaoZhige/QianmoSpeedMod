@@ -1,299 +1,853 @@
 package com.example.qianmospeed.config;
 
 import net.minecraftforge.common.ForgeConfigSpec;
-import net.minecraftforge.fml.ModLoadingContext;
-import net.minecraftforge.fml.config.ModConfig.Type;
-import org.apache.commons.lang3.tuple.Pair;
+import net.minecraftforge.fml.common.Mod;
 
 import java.util.Arrays;
 import java.util.List;
 
+@Mod.EventBusSubscriber
 public class SpeedModConfig {
-    public static final CommonConfig COMMON;
-    public static final ForgeConfigSpec COMMON_SPEC;
+    // 配置规范
+    public static final ForgeConfigSpec SPEC;
+
+    // 客户端配置
+    public static final ForgeConfigSpec.BooleanValue DEBUG_MESSAGES;
+    public static final ForgeConfigSpec.BooleanValue LOGIN_MESSAGES;
+    public static final ForgeConfigSpec.BooleanValue SPEED_EFFECT_MESSAGES;
+
+    // 游戏性配置
+    public static final ForgeConfigSpec.IntValue CHECK_INTERVAL;
+
+    // 速度加成配置
+    public static final ForgeConfigSpec.DoubleValue SPEED_MULTIPLIER_1;
+    public static final ForgeConfigSpec.DoubleValue SPEED_MULTIPLIER_2;
+    public static final ForgeConfigSpec.DoubleValue SPEED_MULTIPLIER_3;
+
+    // 高级功能配置
+    public static final ForgeConfigSpec.BooleanValue ADVANCED_FEATURES;
+    public static final ForgeConfigSpec.BooleanValue AUTO_ENABLE_ADVANCED;
+
+    // 道路检测模式枚举
+    public enum RoadDetectionMode {
+        BASIC, // 基础模式：只检测配置的单个方块
+        ENHANCED, // 增强模式：检测道路网络和连续性
+        SMART // 智能模式：动态调整检测策略
+    }
+
+    public static final ForgeConfigSpec.EnumValue<RoadDetectionMode> ROAD_DETECTION_MODE;
+
+    // ========== 方向检测配置 ==========
+
+    // 方向检测开关（仅基础模式使用）
+    public static final ForgeConfigSpec.BooleanValue DIRECTIONAL_DETECTION;
+
+    // 方向检测的最小长度
+    public static final ForgeConfigSpec.IntValue MIN_DIRECTIONAL_LENGTH;
+
+    // 方向检测的最大长度
+    public static final ForgeConfigSpec.IntValue MAX_DIRECTIONAL_LENGTH;
+
+    // ========== 分开的道路方块配置 ==========
+
+    // 基础模式道路方块列表
+    private static List<String> basicRoadBlockIds = new java.util.ArrayList<>();
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> BASIC_ROAD_BLOCKS;
+
+    // 高级模式道路方块列表（通常包含更多方块）
+    private static List<String> advancedRoadBlockIds = new java.util.ArrayList<>();
+    public static final ForgeConfigSpec.ConfigValue<List<? extends String>> ADVANCED_ROAD_BLOCKS;
 
     static {
-        final Pair<CommonConfig, ForgeConfigSpec> specPair = new ForgeConfigSpec.Builder().configure(CommonConfig::new);
-        COMMON = specPair.getLeft();
-        COMMON_SPEC = specPair.getRight();
-    }
+        ForgeConfigSpec.Builder builder = new ForgeConfigSpec.Builder();
 
-    public static void register() {
-        ModLoadingContext.get().registerConfig(Type.COMMON, COMMON_SPEC, "qianmospeed-common.toml");
-    }
+        // ========== 客户端配置 ==========
+        builder.push("client");
 
-    public static class CommonConfig {
-        // 聊天消息配置 / Chat Message Settings
-        public final ForgeConfigSpec.BooleanValue enableLoginMessages;
-        public final ForgeConfigSpec.BooleanValue enableDebugMessages;
-        
-        // 新增：速度效果提示开关 / Speed Effect Notifications Toggle
-        public final ForgeConfigSpec.BooleanValue enableSpeedEffectMessages;
+        DEBUG_MESSAGES = builder
+                .comment(
+                        "启用调试消息（在控制台输出详细日志）",
+                        "Enable debug messages (output detailed logs to console)",
+                        "默认/Default: false")
+                .define("debugMessages", false);
 
-        // 功能配置 / Feature Settings
-        public final ForgeConfigSpec.BooleanValue enableBasicRoadDetection;
-        public final ForgeConfigSpec.BooleanValue enableAdvancedFeatures;
+        LOGIN_MESSAGES = builder
+                .comment(
+                        "启用登录欢迎消息",
+                        "Enable login welcome messages",
+                        "默认/Default: true")
+                .define("loginMessages", true);
 
-        // 速度设置 / Speed Settings
-        public final ForgeConfigSpec.DoubleValue speedMultiplierLevel1;
-        public final ForgeConfigSpec.DoubleValue speedMultiplierLevel2;
-        public final ForgeConfigSpec.DoubleValue speedMultiplierLevel3;
-        public final ForgeConfigSpec.IntValue checkInterval;
+        SPEED_EFFECT_MESSAGES = builder
+                .comment(
+                        "启用速度效果应用/移除的消息提示",
+                        "Enable speed effect application/removal message prompts",
+                        "默认/Default: false")
+                .define("speedEffectMessages", false);
 
-        // 基础模式道路方块配置 / Basic Mode Road Blocks Settings
-        public final ForgeConfigSpec.ConfigValue<List<? extends String>> basicRoadBlocks;
-        
-        // 高级模式道路方块配置 / Advanced Mode Road Blocks Settings
-        public final ForgeConfigSpec.ConfigValue<List<? extends String>> advancedRoadBlocks;
+        builder.pop();
 
-        public CommonConfig(ForgeConfigSpec.Builder builder) {
-            // 配置标题 / Configuration title
-            builder.comment("阡陌疾旅模组配置 / Qianmo Speed Mod Configuration")
-                    .push("general");
+        // ========== 游戏性配置 ==========
+        builder.push("gameplay");
 
-            enableLoginMessages = builder
-                    .comment("是否显示登录提示消息 / Whether to show login notification messages")
-                    .define("enableLoginMessages", true);
+        CHECK_INTERVAL = builder
+                .comment(
+                        "检查玩家是否在道路上的间隔（tick）",
+                        "Interval for checking if player is on road (in ticks)",
+                        "20 tick = 1秒/20 ticks = 1 second",
+                        "最小值/Minimum: 1, 最大值/Maximum: 200",
+                        "默认/Default: 40 (2秒/2 seconds)")
+                .defineInRange("checkInterval", 40, 1, 200);
 
-            enableDebugMessages = builder
-                    .comment("是否在控制台显示调试信息 / Whether to show debug messages in console")
-                    .define("enableDebugMessages", false);
-            
-            // 速度效果提示开关
-            enableSpeedEffectMessages = builder
-                    .comment("是否显示速度加成/移除的提示消息 / Whether to show speed effect applied/removed notification messages")
-                    .define("enableSpeedEffectMessages", false);
+        builder.pop();
 
-            enableBasicRoadDetection = builder
-                    .comment("启用基础道路检测 / Enable basic road detection")
-                    .define("enableBasicRoadDetection", true);
+        // ========== 速度加成配置 ==========
+        builder.push("speed_multipliers");
 
-            enableAdvancedFeatures = builder
-                    .comment("启用高级功能（需要RoadWeaver）/ Enable advanced features (requires RoadWeaver)")
-                    .define("enableAdvancedFeatures", true);
+        SPEED_MULTIPLIER_1 = builder
+                .comment(
+                        "旅行的祝福 I 级速度加成倍数",
+                        "Travel Blessings Level I speed multiplier",
+                        "范围/Range: 1.0 - 5.0",
+                        "1.0 = 无加成/No bonus, 1.4 = 40% 加速/40% speed increase",
+                        "默认/Default: 1.4")
+                .defineInRange("speedMultiplier1", 1.4, 1.0, 5.0);
 
-            builder.pop();
+        SPEED_MULTIPLIER_2 = builder
+                .comment(
+                        "旅行的祝福 II 级速度加成倍数",
+                        "Travel Blessings Level II speed multiplier",
+                        "范围/Range: 1.0 - 5.0",
+                        "应大于等于 I 级/Must be >= Level I",
+                        "默认/Default: 1.8")
+                .defineInRange("speedMultiplier2", 1.8, 1.0, 5.0);
 
-            builder.push("speed_settings");
+        SPEED_MULTIPLIER_3 = builder
+                .comment(
+                        "旅行的祝福 III 级速度加成倍数",
+                        "Travel Blessings Level III speed multiplier",
+                        "范围/Range: 1.0 - 5.0",
+                        "应大于等于 II 级/Must be >= Level II",
+                        "默认/Default: 2.2")
+                .defineInRange("speedMultiplier3", 2.2, 1.0, 5.0);
 
-            speedMultiplierLevel1 = builder
-                    .comment("I级附魔速度加成（1.5 = +50%）最小值：1.0 最大值：5.0 / Level I enchantment speed multiplier (1.5 = +50%) min:1.0, max:5.0")
-                    .defineInRange("speedMultiplierLevel1", 1.5, 1.0, 5.0);
+        builder.pop();
 
-            speedMultiplierLevel2 = builder
-                    .comment("II级附魔速度加成（2.0 = +100%）最小值：1.0 最大值：5.0 / Level II enchantment speed multiplier (2.0 = +100%) min:1.0, max:5.0")
-                    .defineInRange("speedMultiplierLevel2", 2.0, 1.0, 5.0);
+        // ========== 方向检测配置 ==========
+        builder.push("directional_detection");
 
-            speedMultiplierLevel3 = builder
-                    .comment("III级附魔速度加成（2.5 = +150%）最小值：1.0 最大值：5.0 / Level III enchantment speed multiplier (2.5 = +150%) min:1.0, max:5.0")
-                    .defineInRange("speedMultiplierLevel3", 2.5, 1.0, 5.0);
+        DIRECTIONAL_DETECTION = builder
+                .comment(
+                        "启用方向检测功能（仅基础模式有效）",
+                        "Enable directional detection (only effective in basic mode)",
+                        "功能：检查道路在X或Z方向上的连续长度",
+                        "Function: Check continuous length of road in X or Z direction",
+                        "用于区分道路和地板/广场",
+                        "Used to distinguish roads from floors/plazas",
+                        "默认/Default: true")
+                .define("directionalDetection", true);
 
-            checkInterval = builder
-                    .comment("道路检测间隔（ticks，20 ticks = 1秒，默认50=2.5秒）最小值：10 最大值：200 / Road detection interval (ticks, 20 ticks = 1 second, default 50=2.5 seconds) min:10, max:200")
-                    .defineInRange("checkInterval", 50, 10, 200);
+        MIN_DIRECTIONAL_LENGTH = builder
+                .comment(
+                        "道路最小连续长度（格数）",
+                        "Minimum continuous length for roads (in blocks)",
+                        "小于此值被视为地板/广场/装饰",
+                        "Values less than this are considered floors/plazas/decorations",
+                        "范围/Range: 1-20",
+                        "默认/Default: 2")
+                .defineInRange("minDirectionalLength", 2, 1, 20);
 
-            builder.pop();
+        MAX_DIRECTIONAL_LENGTH = builder
+                .comment(
+                        "道路最大连续长度（格数）",
+                        "Maximum continuous length for roads (in blocks)",
+                        "大于此值被视为地板/广场（无限延伸）",
+                        "Values greater than this are considered floors/plazas (infinite extension)",
+                        "范围/Range: 1-100",
+                        "注意：此设置仅影响基础模式",
+                        "Note: This setting only affects basic mode",
+                        "默认/Default: 5")
+                .defineInRange("maxDirectionalLength", 5, 1, 100);
 
-            builder.push("road_blocks");
+        builder.pop();
 
-            // 基础模式道路方块列表 / Basic mode road blocks list
-            basicRoadBlocks = builder
-                    .comment("基础模式道路方块ID列表\n格式: \"modid:blockname\"\n基础模式只包含明确的人工道路方块，不包含自然方块 / Basic mode road block ID list\nFormat: \"modid:blockname\"\nBasic mode only includes clear artificial road blocks, excludes natural blocks")
-                    .defineList("basicRoadBlocks",
+        // ========== 高级功能配置 ==========
+        builder.push("advanced_features");
+
+        ADVANCED_FEATURES = builder
+                .comment(
+                        "启用高级道路检测功能",
+                        "Enable advanced road detection features",
+                        "功能包括：道路网络检测、连续性检查等",
+                        "Features include: road network detection, continuity checking, etc.",
+                        "检测到专业道路模组（如阡陌交通、Road Architect等）会自动启用",
+                        "Professional road mods (like RoadWeaver, Road Architect) will auto-enable",
+                        "注意：高级模式不使用方向检测",
+                        "Note: Advanced mode does not use directional detection",
+                        "默认/Default: false")
+                .define("advancedFeaturesEnabled", false);
+
+        AUTO_ENABLE_ADVANCED = builder
+                .comment(
+                        "检测到非专业道路模组时自动启用高级模式",
+                        "Automatically enable advanced mode when non-professional road mods are detected",
+                        "专业道路模组会强制启用，不受此设置影响",
+                        "Professional road mods force enable, unaffected by this setting",
+                        "默认/Default: false")
+                .define("autoEnableAdvanced", false);
+
+        ROAD_DETECTION_MODE = builder
+                .comment(
+                        "道路检测模式",
+                        "Road detection mode",
+                        "BASIC: 基础模式 - 只检测单个方块",
+                        "ENHANCED: 增强模式 - 检测道路网络和连续性",
+                        "SMART: 智能模式 - 根据情况动态调整",
+                        "默认/Default: SMART")
+                .defineEnum("roadDetectionMode", RoadDetectionMode.SMART);
+
+        builder.pop();
+
+        // ========== 基础模式道路方块配置 ==========
+        builder.push("basic_road_blocks");
+
+        BASIC_ROAD_BLOCKS = builder
+                .comment(
+                        "基础模式：被认为是道路的方块ID列表",
+                        "Basic mode: List of block IDs considered as roads",
+                        "只在基础模式下使用/Only used in basic mode",
+                        "受方向检测影响/Affected by directional detection",
+                        "格式/Format: modid:blockid")
+                .defineList("basicRoadBlocks",
                         Arrays.asList(
-                            // === 明确的道路方块 === / Clear Road Blocks ===
-                            "minecraft:dirt_path",           // 土径（最明确的道路）/ Dirt Path (most clear road)
-                            
-                            // === 建筑类道路方块 === / Construction Road Blocks ===
-                            "minecraft:stone_bricks",        // 石砖 / Stone Bricks
-                            "minecraft:sandstone",           // 砂岩 / Sandstone
-                            "minecraft:oak_planks",          // 橡木木板 / Oak Planks
-                            "minecraft:mud_bricks",          // 泥砖 / Mud Bricks
-                            "minecraft:packed_mud",          // 泥坯 / Packed Mud
-                            "minecraft:mossy_stone_bricks",  // 苔石砖 / Mossy Stone Bricks
-                            "minecraft:cracked_stone_bricks", // 裂纹石砖 / Cracked Stone Bricks
-                            "minecraft:polished_blackstone_bricks", // 磨制黑石砖 / Polished Blackstone Bricks
-                            "minecraft:nether_bricks",       // 下界砖 / Nether Bricks
-                            "minecraft:end_stone_bricks",    // 末地石砖 / End Stone Bricks
-                            
-                            // === 各种台阶（明确的道路表面）=== / Various Slabs (clear road surfaces) ===
-                            "minecraft:stone_brick_slab",
-                            "minecraft:sandstone_slab",
-                            "minecraft:polished_andesite_slab",
-                            "minecraft:mud_brick_slab",
-                            "minecraft:mossy_stone_brick_slab",
-                            "minecraft:blackstone_slab",
-                            "minecraft:nether_brick_slab",
-                            "minecraft:end_stone_brick_slab",
-                            
-                            // === 木板类台阶（人工铺设）=== / Planks slabs (artificially laid) ===
-                            "minecraft:oak_slab",
-                            "minecraft:birch_slab",
-                            "minecraft:spruce_slab",
-                            "minecraft:cherry_slab",
-                            "minecraft:acacia_slab",
-                            "minecraft:dark_oak_slab",
-                            "minecraft:jungle_slab",
-                            "minecraft:mangrove_slab",
-                            "minecraft:crimson_slab",
-                            "minecraft:warped_slab",
-                            
-                            // === 特别添加：明显的道路方块 === / Specifically added: obvious road blocks
-                            "minecraft:polished_andesite",   // 磨制安山岩 / Polished Andesite
-                            "minecraft:polished_diorite",    // 磨制闪长岩 / Polished Diorite
-                            "minecraft:polished_granite",    // 磨制花岗岩 / Polished Granite
-                            
-                            // === 混凝土（明确的人工建筑）=== / Concrete (clear artificial construction) ===
-                            "minecraft:white_concrete",
-                            "minecraft:orange_concrete",
-                            "minecraft:magenta_concrete",
-                            "minecraft:light_blue_concrete",
-                            "minecraft:yellow_concrete",
-                            "minecraft:lime_concrete",
-                            "minecraft:pink_concrete",
-                            "minecraft:gray_concrete",
-                            "minecraft:light_gray_concrete",
-                            "minecraft:cyan_concrete",
-                            "minecraft:purple_concrete",
-                            "minecraft:blue_concrete",
-                            "minecraft:brown_concrete",
-                            "minecraft:green_concrete",
-                            "minecraft:red_concrete",
-                            "minecraft:black_concrete"
-                        ),
-                        obj -> obj instanceof String);
+                                "minecraft:dirt_path",
+                                "minecraft:stone_bricks",
+                                "minecraft:sandstone",
+                                "minecraft:mud_bricks",
+                                "minecraft:packed_mud",
+                                "minecraft:mossy_stone_bricks",
+                                "minecraft:cracked_stone_bricks",
+                                "minecraft:polished_blackstone_bricks",
+                                "minecraft:nether_bricks",
+                                "minecraft:end_stone_bricks",
+                                "minecraft:stone_brick_slab",
+                                "minecraft:sandstone_slab",
+                                "minecraft:polished_andesite_slab",
+                                "minecraft:mud_brick_slab",
+                                "minecraft:mossy_stone_brick_slab",
+                                "minecraft:blackstone_slab",
+                                "minecraft:nether_brick_slab",
+                                "minecraft:end_stone_brick_slab",
+                                "minecraft:oak_slab",
+                                "minecraft:birch_slab",
+                                "minecraft:spruce_slab",
+                                "minecraft:cherry_slab",
+                                "minecraft:acacia_slab",
+                                "minecraft:dark_oak_slab",
+                                "minecraft:jungle_slab",
+                                "minecraft:mangrove_slab",
+                                "minecraft:crimson_slab",
+                                "minecraft:warped_slab",
+                                "minecraft:polished_andesite",
+                                "minecraft:polished_diorite",
+                                "minecraft:polished_granite",
+                                "minecraft:white_concrete",
+                                "minecraft:orange_concrete",
+                                "minecraft:magenta_concrete",
+                                "minecraft:light_blue_concrete",
+                                "minecraft:yellow_concrete",
+                                "minecraft:lime_concrete",
+                                "minecraft:pink_concrete",
+                                "minecraft:gray_concrete",
+                                "minecraft:light_gray_concrete",
+                                "minecraft:cyan_concrete",
+                                "minecraft:purple_concrete",
+                                "minecraft:blue_concrete",
+                                "minecraft:brown_concrete",
+                                "minecraft:green_concrete",
+                                "minecraft:red_concrete",
+                                "minecraft:black_concrete"),
+                        o -> o instanceof String);
 
-            // 高级模式道路方块列表 / Advanced mode road blocks list
-            advancedRoadBlocks = builder
-                    .comment("高级模式道路方块ID列表\n格式: \"modid:blockname\"\n高级模式包含更多可能的\"道路\"方块，利用RoadWeaver的智能上下文检测 / Advanced mode road block ID list\nFormat: \"modid:blockname\"\nAdvanced mode includes more possible \"road\" blocks, utilizing RoadWeaver's intelligent context detection")
-                    .defineList("advancedRoadBlocks",
+        builder.pop();
+
+        // ========== 高级模式道路方块配置 ==========
+        builder.push("advanced_road_blocks");
+
+        ADVANCED_ROAD_BLOCKS = builder
+                .comment(
+                        "高级模式：被认为是道路的方块ID列表",
+                        "Advanced mode: List of block IDs considered as roads",
+                        "只在高级模式下使用/Only used in advanced mode",
+                        "不受方向检测影响/Not affected by directional detection",
+                        "可以包含更多种类的方块，因为高级模式有连续性检测",
+                        "Can include more types of blocks because advanced mode has continuity checking",
+                        "包含基础模式的方块，并添加更多选择",
+                        "Includes basic mode blocks and adds more options",
+                        "为专业道路模组优化",
+                        "Optimized for professional road mods")
+                .defineList("advancedRoadBlocks",
                         Arrays.asList(
-                            // 包含所有基础模式方块 / Include all basic mode blocks
-                            "minecraft:dirt_path",
-                            "minecraft:cobblestone",
-                            "minecraft:stone_bricks",
-                            "minecraft:sandstone",
-                            "minecraft:mud_bricks",
-                            "minecraft:packed_mud",
-                            "minecraft:mossy_stone_bricks",
-                            "minecraft:cracked_stone_bricks",
-                            "minecraft:polished_blackstone_bricks",
-                            "minecraft:nether_bricks",
-                            "minecraft:end_stone_bricks",
-                            "minecraft:stone_brick_slab",
-                            "minecraft:sandstone_slab",
-                            "minecraft:polished_andesite_slab",
-                            "minecraft:mud_brick_slab",
-                            "minecraft:mossy_stone_brick_slab",
-                            "minecraft:blackstone_slab",
-                            "minecraft:nether_brick_slab",
-                            "minecraft:end_stone_brick_slab",
-                            "minecraft:oak_slab",
-                            "minecraft:birch_slab",
-                            "minecraft:spruce_slab",
-                            "minecraft:cherry_slab",
-                            "minecraft:acacia_slab",
-                            "minecraft:dark_oak_slab",
-                            "minecraft:jungle_slab",
-                            "minecraft:mangrove_slab",
-                            "minecraft:crimson_slab",
-                            "minecraft:warped_slab",
-                            "minecraft:polished_andesite",
-                            "minecraft:polished_diorite",
-                            "minecraft:polished_granite",
-                            "minecraft:oak_planks",
-                            
-                            // 混凝土 / Concrete
-                            "minecraft:white_concrete",
-                            "minecraft:orange_concrete",
-                            "minecraft:magenta_concrete",
-                            "minecraft:light_blue_concrete",
-                            "minecraft:yellow_concrete",
-                            "minecraft:lime_concrete",
-                            "minecraft:pink_concrete",
-                            "minecraft:gray_concrete",
-                            "minecraft:light_gray_concrete",
-                            "minecraft:cyan_concrete",
-                            "minecraft:purple_concrete",
-                            "minecraft:blue_concrete",
-                            "minecraft:brown_concrete",
-                            "minecraft:green_concrete",
-                            "minecraft:red_concrete",
-                            "minecraft:black_concrete",
-                            
-                            // === 高级模式额外添加的"类道路"方块 === / Advanced mode additional "road-like" blocks
-                            "minecraft:stone",               // 石头（但需要上下文判断）/ Stone (requires context judgment)
-                            "minecraft:andesite",            // 安山岩 / Andesite
-                            "minecraft:diorite",             // 闪长岩 / Diorite
-                            "minecraft:granite",             // 花岗岩 / Granite
-                            "minecraft:gravel",              // 砂砾 / Gravel
-                            "minecraft:sand",                // 沙子 / Sand
-                            "minecraft:coarse_dirt",         // 砂土 / Coarse Dirt
-                            "minecraft:moss_block",          // 苔藓块 / Moss Block
-                            "minecraft:rooted_dirt",         // 缠根泥土 / Rooted Dirt
-                            "minecraft:podzol",              // 灰化土 / Podzol
-                            "minecraft:snow_block",          // 雪块 / Snow Block
-                            "minecraft:packed_ice",          // 浮冰 / Packed Ice
-                            "minecraft:red_sand",            // 红沙 / Red Sand
-                            "minecraft:terracotta",          // 陶瓦 / Terracotta
-                            "minecraft:mud",                 // 泥巴 / Mud
-                            "minecraft:birch_planks",        // 白桦木板 / Birch Planks
-                            "minecraft:acacia_planks",       // 金合欢木板 / Acacia Planks
-                            "minecraft:dark_oak_planks",     // 深色橡木木板 / Dark Oak Planks
-                            "minecraft:spruce_planks",       // 云杉木板 / Spruce Planks
-                            "minecraft:cherry_planks",       // 樱花木板 / Cherry Planks
-                            "minecraft:jungle_planks",       // 丛林木板 / Jungle Planks
-                            "minecraft:mangrove_planks",     // 红树木板 / Mangrove Planks
-                            "minecraft:crimson_planks",      // 绯红木板 / Crimson Planks
-                            "minecraft:warped_planks",       // 诡异木板 / Warped Planks
-                            "minecraft:muddy_mangrove_roots" // 沾泥的红树根 / Muddy Mangrove Roots
-                        ),
-                        obj -> obj instanceof String);
+                                "minecraft:dirt_path",
+                                "minecraft:dirt",
+                                "minecraft:cobblestone",
+                                "minecraft:stone_bricks",
+                                "minecraft:sandstone",
+                                "minecraft:mud_bricks",
+                                "minecraft:packed_mud",
+                                "minecraft:mossy_stone_bricks",
+                                "minecraft:cracked_stone_bricks",
+                                "minecraft:polished_blackstone_bricks",
+                                "minecraft:nether_bricks",
+                                "minecraft:end_stone_bricks",
+                                "minecraft:stone_brick_slab",
+                                "minecraft:sandstone_slab",
+                                "minecraft:polished_andesite_slab",
+                                "minecraft:mud_brick_slab",
+                                "minecraft:mossy_stone_brick_slab",
+                                "minecraft:blackstone_slab",
+                                "minecraft:nether_brick_slab",
+                                "minecraft:end_stone_brick_slab",
+                                "minecraft:oak_slab",
+                                "minecraft:birch_slab",
+                                "minecraft:spruce_slab",
+                                "minecraft:cherry_slab",
+                                "minecraft:acacia_slab",
+                                "minecraft:dark_oak_slab",
+                                "minecraft:jungle_slab",
+                                "minecraft:mangrove_slab",
+                                "minecraft:crimson_slab",
+                                "minecraft:warped_slab",
+                                "minecraft:polished_andesite",
+                                "minecraft:polished_diorite",
+                                "minecraft:polished_granite",
+                                "minecraft:white_concrete",
+                                "minecraft:orange_concrete",
+                                "minecraft:magenta_concrete",
+                                "minecraft:light_blue_concrete",
+                                "minecraft:yellow_concrete",
+                                "minecraft:lime_concrete",
+                                "minecraft:pink_concrete",
+                                "minecraft:gray_concrete",
+                                "minecraft:light_gray_concrete",
+                                "minecraft:cyan_concrete",
+                                "minecraft:purple_concrete",
+                                "minecraft:blue_concrete",
+                                "minecraft:brown_concrete",
+                                "minecraft:green_concrete",
+                                "minecraft:red_concrete",
+                                "minecraft:black_concrete",
+                                "minecraft:stone",
+                                "minecraft:andesite",
+                                "minecraft:diorite",
+                                "minecraft:granite",
+                                "minecraft:gravel",
+                                "minecraft:sand",
+                                "minecraft:coarse_dirt",
+                                "minecraft:moss_block",
+                                "minecraft:rooted_dirt",
+                                "minecraft:podzol",
+                                "minecraft:snow_block",
+                                "minecraft:packed_ice",
+                                "minecraft:red_sand",
+                                "minecraft:terracotta",
+                                "minecraft:mud",
+                                "minecraft:muddy_mangrove_roots"),
+                        o -> o instanceof String);
 
-            builder.pop();
-        }
+        builder.pop();
+
+        SPEC = builder.build();
     }
 
-    // 配置获取方法 / Configuration getter methods
+    // ========== 配置值获取方法 ==========
+
+    // 客户端配置
+    public static boolean isDebugMessagesEnabled() {
+        return DEBUG_MESSAGES.get();
+    }
 
     public static boolean isLoginMessagesEnabled() {
-        return COMMON.enableLoginMessages.get();
+        return LOGIN_MESSAGES.get();
     }
 
-    public static boolean isDebugMessagesEnabled() {
-        return COMMON.enableDebugMessages.get();
-    }
-    
     public static boolean isSpeedEffectMessagesEnabled() {
-        return COMMON.enableSpeedEffectMessages.get();
+        return SPEED_EFFECT_MESSAGES.get();
     }
 
-    public static boolean isBasicDetectionEnabled() {
-        return COMMON.enableBasicRoadDetection.get();
+    // 游戏性配置
+    public static int getCheckInterval() {
+        return CHECK_INTERVAL.get();
     }
 
-    public static boolean isAdvancedFeaturesEnabled() {
-        return COMMON.enableAdvancedFeatures.get();
-    }
-
+    // 速度加成配置
     public static double getSpeedMultiplier(int level) {
         return switch (level) {
-            case 1 -> COMMON.speedMultiplierLevel1.get();
-            case 2 -> COMMON.speedMultiplierLevel2.get();
-            case 3 -> COMMON.speedMultiplierLevel3.get();
+            case 1 -> SPEED_MULTIPLIER_1.get();
+            case 2 -> SPEED_MULTIPLIER_2.get();
+            case 3 -> SPEED_MULTIPLIER_3.get();
             default -> 1.0;
         };
     }
 
-    public static int getCheckInterval() {
-        return COMMON.checkInterval.get();
+    // 高级功能配置
+    public static boolean isAdvancedFeaturesEnabled() {
+        return ADVANCED_FEATURES.get();
     }
 
-    public static List<String> getBasicRoadBlocks() {
-        return (List<String>) COMMON.basicRoadBlocks.get();
+    public static boolean shouldAutoEnableAdvanced() {
+        return AUTO_ENABLE_ADVANCED.get();
     }
 
-    public static List<String> getAdvancedRoadBlocks() {
-        return (List<String>) COMMON.advancedRoadBlocks.get();
+    public static RoadDetectionMode getRoadDetectionMode() {
+        return ROAD_DETECTION_MODE.get();
+    }
+
+    // ========== 方向检测相关方法 ==========
+
+    /**
+     * 是否启用方向检测（仅基础模式）
+     * Whether directional detection is enabled (basic mode only)
+     */
+    public static boolean isDirectionalDetectionEnabled() {
+        return DIRECTIONAL_DETECTION.get();
+    }
+
+    /**
+     * 获取最小方向长度
+     * Get minimum directional length
+     */
+    public static int getMinDirectionalLength() {
+        return MIN_DIRECTIONAL_LENGTH.get();
+    }
+
+    /**
+     * 获取最大方向长度
+     * Get maximum directional length
+     */
+    public static int getMaxDirectionalLength() {
+        return MAX_DIRECTIONAL_LENGTH.get();
+    }
+
+    /**
+     * 检查长度是否在有效道路范围内
+     * Check if length is within valid road range
+     */
+    public static boolean isValidRoadLength(int length) {
+        int min = getMinDirectionalLength();
+        int max = getMaxDirectionalLength();
+        return length >= min && length <= max;
+    }
+
+    /**
+     * 检查是否是地板/广场（长度超出范围）
+     * Check if it's floor/plaza (length out of range)
+     */
+    public static boolean isFloorOrPlaza(int length) {
+        return !isValidRoadLength(length);
+    }
+
+    // ========== 分开的道路方块相关方法 ==========
+
+    /**
+     * 获取当前模式使用的道路方块列表
+     * Get road block list for current mode
+     */
+    public static List<String> getCurrentRoadBlockIds() {
+        return isAdvancedFeaturesEnabled() ? getAdvancedRoadBlockIds() : getBasicRoadBlockIds();
+    }
+
+    /**
+     * 获取基础模式道路方块ID列表
+     * Get basic mode road block ID list
+     */
+    public static List<String> getBasicRoadBlockIds() {
+        if (basicRoadBlockIds.isEmpty()) {
+            basicRoadBlockIds.addAll(BASIC_ROAD_BLOCKS.get());
+        }
+        return basicRoadBlockIds;
+    }
+
+    /**
+     * 获取高级模式道路方块ID列表
+     * Get advanced mode road block ID list
+     */
+    public static List<String> getAdvancedRoadBlockIds() {
+        if (advancedRoadBlockIds.isEmpty()) {
+            advancedRoadBlockIds.addAll(ADVANCED_ROAD_BLOCKS.get());
+        }
+        return advancedRoadBlockIds;
+    }
+
+    /**
+     * 重新加载道路方块列表
+     * Reload road block lists
+     */
+    public static void reloadRoadBlocks() {
+        basicRoadBlockIds.clear();
+        basicRoadBlockIds.addAll(BASIC_ROAD_BLOCKS.get());
+
+        advancedRoadBlockIds.clear();
+        advancedRoadBlockIds.addAll(ADVANCED_ROAD_BLOCKS.get());
+    }
+
+    /**
+     * 检查指定方块是否是道路方块（根据当前模式）
+     * Check if specified block is a road block (based on current mode)
+     */
+    public static boolean isRoadBlock(net.minecraft.world.level.block.Block block) {
+        String blockId = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(block).toString();
+
+        if (isAdvancedFeaturesEnabled()) {
+            // 高级模式：检查高级方块列表
+            return getAdvancedRoadBlockIds().contains(blockId);
+        } else {
+            // 基础模式：检查基础方块列表
+            return getBasicRoadBlockIds().contains(blockId);
+        }
+    }
+
+    /**
+     * 检查指定方块是否是基础模式道路方块
+     * Check if specified block is a basic mode road block
+     */
+    public static boolean isBasicRoadBlock(net.minecraft.world.level.block.Block block) {
+        String blockId = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(block).toString();
+        return getBasicRoadBlockIds().contains(blockId);
+    }
+
+    /**
+     * 检查指定方块是否是高级模式道路方块
+     * Check if specified block is an advanced mode road block
+     */
+    public static boolean isAdvancedRoadBlock(net.minecraft.world.level.block.Block block) {
+        String blockId = net.minecraftforge.registries.ForgeRegistries.BLOCKS.getKey(block).toString();
+        return getAdvancedRoadBlockIds().contains(blockId);
+    }
+
+    /**
+     * 添加道路方块到指定模式
+     * Add road block to specified mode
+     */
+    public static void addRoadBlock(String blockId, boolean toAdvancedMode) {
+        if (toAdvancedMode) {
+            if (!advancedRoadBlockIds.contains(blockId)) {
+                advancedRoadBlockIds.add(blockId);
+            }
+        } else {
+            if (!basicRoadBlockIds.contains(blockId)) {
+                basicRoadBlockIds.add(blockId);
+            }
+        }
+    }
+
+    /**
+     * 从指定模式移除道路方块
+     * Remove road block from specified mode
+     */
+    public static void removeRoadBlock(String blockId, boolean fromAdvancedMode) {
+        if (fromAdvancedMode) {
+            advancedRoadBlockIds.remove(blockId);
+        } else {
+            basicRoadBlockIds.remove(blockId);
+        }
+    }
+
+    /**
+     * 获取所有可能的道路方块（包括两个模式）
+     * Get all possible road blocks (including both modes)
+     */
+    public static List<String> getAllRoadBlocks() {
+        List<String> allBlocks = new java.util.ArrayList<>();
+        allBlocks.addAll(getBasicRoadBlockIds());
+
+        // 添加高级模式中独有的方块
+        for (String blockId : getAdvancedRoadBlockIds()) {
+            if (!allBlocks.contains(blockId)) {
+                allBlocks.add(blockId);
+            }
+        }
+
+        return allBlocks;
+    }
+
+    /**
+     * 获取两个模式的方块差异
+     * Get differences between two modes' block lists
+     */
+    public static List<String> getModeDifferences() {
+        List<String> differences = new java.util.ArrayList<>();
+
+        // 找出高级模式中有但基础模式中没有的方块
+        for (String blockId : getAdvancedRoadBlockIds()) {
+            if (!getBasicRoadBlockIds().contains(blockId)) {
+                differences.add(blockId);
+            }
+        }
+
+        return differences;
+    }
+
+    // ========== 配置验证和工具方法 ==========
+
+    /**
+     * 验证速度加成配置是否合理
+     * Validate if speed multiplier configuration is reasonable
+     */
+    public static boolean validateSpeedMultipliers() {
+        double lvl1 = SPEED_MULTIPLIER_1.get();
+        double lvl2 = SPEED_MULTIPLIER_2.get();
+        double lvl3 = SPEED_MULTIPLIER_3.get();
+
+        // 检查是否在有效范围内
+        if (lvl1 < 1.0 || lvl1 > 5.0)
+            return false;
+        if (lvl2 < 1.0 || lvl2 > 5.0)
+            return false;
+        if (lvl3 < 1.0 || lvl3 > 5.0)
+            return false;
+
+        // 检查是否递增
+        if (lvl2 < lvl1)
+            return false;
+        if (lvl3 < lvl2)
+            return false;
+
+        return true;
+    }
+
+    /**
+     * 验证方向检测配置
+     * Validate directional detection configuration
+     */
+    public static boolean validateDirectionalDetection() {
+        int min = getMinDirectionalLength();
+        int max = getMaxDirectionalLength();
+
+        // 检查最小值和最大值是否合理
+        if (min < 1 || min > 20)
+            return false;
+        if (max < 5 || max > 100)
+            return false;
+        if (min >= max)
+            return false; // 最小值必须小于最大值
+
+        return true;
+    }
+
+    /**
+     * 验证道路方块配置
+     * Validate road block configuration
+     */
+    public static boolean validateRoadBlocks() {
+        // 检查基础模式方块列表不为空
+        if (getBasicRoadBlockIds().isEmpty()) {
+            return false;
+        }
+
+        // 检查高级模式包含基础模式的所有方块
+        for (String blockId : getBasicRoadBlockIds()) {
+            if (!getAdvancedRoadBlockIds().contains(blockId)) {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * 获取配置摘要（用于日志）
+     * Get configuration summary (for logging)
+     */
+    public static String getConfigSummary() {
+        return String.format(
+                "SpeedModConfig Summary: " +
+                        "Debug=%s, LoginMsg=%s, SpeedMsg=%s, " +
+                        "Interval=%dtick, " +
+                        "Multipliers=[%.2f, %.2f, %.2f], " +
+                        "Advanced=%s, AutoAdvanced=%s, Mode=%s, " +
+                        "Directional=%s (min=%d, max=%d), " +
+                        "BasicRoadBlocks=%d, AdvancedRoadBlocks=%d, ModeDiff=%d",
+                isDebugMessagesEnabled(),
+                isLoginMessagesEnabled(),
+                isSpeedEffectMessagesEnabled(),
+                getCheckInterval(),
+                SPEED_MULTIPLIER_1.get(),
+                SPEED_MULTIPLIER_2.get(),
+                SPEED_MULTIPLIER_3.get(),
+                isAdvancedFeaturesEnabled(),
+                shouldAutoEnableAdvanced(),
+                getRoadDetectionMode(),
+                isDirectionalDetectionEnabled(),
+                getMinDirectionalLength(),
+                getMaxDirectionalLength(),
+                getBasicRoadBlockIds().size(),
+                getAdvancedRoadBlockIds().size(),
+                getModeDifferences().size());
+    }
+
+    /**
+     * 切换模式时获取提示信息
+     * Get hint message when switching modes
+     */
+    public static String getModeSwitchHint() {
+        if (isAdvancedFeaturesEnabled()) {
+            return String.format(
+                    "已切换到高级模式，使用 %d 种道路方块（包含基础模式的 %d 种方块）",
+                    getAdvancedRoadBlockIds().size(),
+                    getBasicRoadBlockIds().size());
+        } else {
+            return String.format(
+                    "已切换到基础模式，使用 %d 种核心道路方块%s",
+                    getBasicRoadBlockIds().size(),
+                    isDirectionalDetectionEnabled() ? String.format(" (方向检测: %d-%d格)",
+                            getMinDirectionalLength(), getMaxDirectionalLength()) : "");
+        }
+    }
+
+    /**
+     * 获取方向检测状态描述
+     * Get directional detection status description
+     */
+    public static String getDirectionalDetectionStatus() {
+        if (!isDirectionalDetectionEnabled()) {
+            return "方向检测已禁用";
+        }
+
+        return String.format(
+                "方向检测已启用，有效道路长度: %d-%d格\n" +
+                        "• 小于%d格: 装饰/小平台\n" +
+                        "• %d-%d格: 有效道路\n" +
+                        "• 大于%d格: 地板/广场",
+                getMinDirectionalLength(), getMaxDirectionalLength(),
+                getMinDirectionalLength(),
+                getMinDirectionalLength(), getMaxDirectionalLength(),
+                getMaxDirectionalLength());
+    }
+
+    /**
+     * 重置为默认配置
+     * Reset to default configuration
+     */
+    public static void resetToDefaults() {
+        // 重置基础模式方块列表
+        basicRoadBlockIds.clear();
+        basicRoadBlockIds.addAll(Arrays.asList(
+                "minecraft:dirt_path",
+                "minecraft:stone_bricks",
+                "minecraft:sandstone",
+                "minecraft:mud_bricks",
+                "minecraft:packed_mud",
+                "minecraft:mossy_stone_bricks",
+                "minecraft:cracked_stone_bricks",
+                "minecraft:polished_blackstone_bricks",
+                "minecraft:nether_bricks",
+                "minecraft:end_stone_bricks",
+                "minecraft:stone_brick_slab",
+                "minecraft:sandstone_slab",
+                "minecraft:polished_andesite_slab",
+                "minecraft:mud_brick_slab",
+                "minecraft:mossy_stone_brick_slab",
+                "minecraft:blackstone_slab",
+                "minecraft:nether_brick_slab",
+                "minecraft:end_stone_brick_slab",
+                "minecraft:oak_slab",
+                "minecraft:birch_slab",
+                "minecraft:spruce_slab",
+                "minecraft:cherry_slab",
+                "minecraft:acacia_slab",
+                "minecraft:dark_oak_slab",
+                "minecraft:jungle_slab",
+                "minecraft:mangrove_slab",
+                "minecraft:crimson_slab",
+                "minecraft:warped_slab",
+                "minecraft:polished_andesite",
+                "minecraft:polished_diorite",
+                "minecraft:polished_granite",
+                "minecraft:white_concrete",
+                "minecraft:orange_concrete",
+                "minecraft:magenta_concrete",
+                "minecraft:light_blue_concrete",
+                "minecraft:yellow_concrete",
+                "minecraft:lime_concrete",
+                "minecraft:pink_concrete",
+                "minecraft:gray_concrete",
+                "minecraft:light_gray_concrete",
+                "minecraft:cyan_concrete",
+                "minecraft:purple_concrete",
+                "minecraft:blue_concrete",
+                "minecraft:brown_concrete",
+                "minecraft:green_concrete",
+                "minecraft:red_concrete",
+                "minecraft:black_concrete"));
+
+        // 重置高级模式方块列表
+        advancedRoadBlockIds.clear();
+        advancedRoadBlockIds.addAll(Arrays.asList(
+                "minecraft:dirt_path",
+                "minecraft:dirt",
+                "minecraft:cobblestone",
+                "minecraft:stone_bricks",
+                "minecraft:sandstone",
+                "minecraft:mud_bricks",
+                "minecraft:packed_mud",
+                "minecraft:mossy_stone_bricks",
+                "minecraft:cracked_stone_bricks",
+                "minecraft:polished_blackstone_bricks",
+                "minecraft:nether_bricks",
+                "minecraft:end_stone_bricks",
+                "minecraft:stone_brick_slab",
+                "minecraft:sandstone_slab",
+                "minecraft:polished_andesite_slab",
+                "minecraft:mud_brick_slab",
+                "minecraft:mossy_stone_brick_slab",
+                "minecraft:blackstone_slab",
+                "minecraft:nether_brick_slab",
+                "minecraft:end_stone_brick_slab",
+                "minecraft:oak_slab",
+                "minecraft:birch_slab",
+                "minecraft:spruce_slab",
+                "minecraft:cherry_slab",
+                "minecraft:acacia_slab",
+                "minecraft:dark_oak_slab",
+                "minecraft:jungle_slab",
+                "minecraft:mangrove_slab",
+                "minecraft:crimson_slab",
+                "minecraft:warped_slab",
+                "minecraft:polished_andesite",
+                "minecraft:polished_diorite",
+                "minecraft:polished_granite",
+                "minecraft:white_concrete",
+                "minecraft:orange_concrete",
+                "minecraft:magenta_concrete",
+                "minecraft:light_blue_concrete",
+                "minecraft:yellow_concrete",
+                "minecraft:lime_concrete",
+                "minecraft:pink_concrete",
+                "minecraft:gray_concrete",
+                "minecraft:light_gray_concrete",
+                "minecraft:cyan_concrete",
+                "minecraft:purple_concrete",
+                "minecraft:blue_concrete",
+                "minecraft:brown_concrete",
+                "minecraft:green_concrete",
+                "minecraft:red_concrete",
+                "minecraft:black_concrete",
+                "minecraft:stone",
+                "minecraft:andesite",
+                "minecraft:diorite",
+                "minecraft:granite",
+                "minecraft:gravel",
+                "minecraft:sand",
+                "minecraft:coarse_dirt",
+                "minecraft:moss_block",
+                "minecraft:rooted_dirt",
+                "minecraft:podzol",
+                "minecraft:snow_block",
+                "minecraft:packed_ice",
+                "minecraft:red_sand",
+                "minecraft:terracotta",
+                "minecraft:mud",
+                "minecraft:muddy_mangrove_roots"));
     }
 }

@@ -1,15 +1,12 @@
 {
-  "enchantment.qianmospeed.qianmo_swiftjourney": "Voyage Rapide Qianmo",
-  "enchantment.qianmospeed.qianmo_swiftjourney.desc": "Accorde un boost de vitesse significatif lors de la marche sur les routes",
+  "enchantment.qianmospeed.travel_blessings": "Bénédiction du Voyageur",
+  "enchantment.qianmospeed.travel_blessings.desc": "Accorde un boost de vitesse significatif en marchant sur les routes",
   
-  "qianmospeed.config.blocks.basicRoadBlocks": "Liste d'ID de blocs de route pour le mode basique\nFormat: \"modid:blockname\"\nLe mode basique n'inclut que des blocs de route artificiels clairs, excluant les blocs naturels",
-  "qianmospeed.config.blocks.advancedRoadBlocks": "Liste d'ID de blocs de route pour le mode avancé\nFormat: \"modid:blockname\"\nLe mode avancé inclut plus de blocs \"routiers\" possibles, utilisant la détection contextuelle intelligente de RoadWeaver",
-
-  "qianmospeed.message.login.basic": "§6[Vitesse Qianmo] §fMode basique intelligent chargé (intervalle: %s ticks)",
-  "qianmospeed.message.login.advanced": "§6[Vitesse Qianmo] §fMode avancé RoadWeaver activé",
+  "qianmospeed.message.login.basic": "§6[阡陌疾旅] §fMode de base intelligent chargé (intervalle: %s ticks)",
+  "qianmospeed.message.login.advanced": "§6[阡陌疾旅] §fMode avancé RoadWeaver activé",
   
   "qianmospeed.message.speed.applied": "§a+ Bonus de vitesse appliqué (niveau: %s)",
-  "qianmospeed.message.speed.removed": "§c- Bonus de vitesse supprimé",
+  "qianmospeed.message.speed.removed": "§c- Bonus de vitesse retiré",
   
-  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver non détecté, utilisation du mode basique"
+  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver non détecté, utilisation du mode de base"
 }
