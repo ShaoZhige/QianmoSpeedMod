@@ -1,0 +1,12 @@
+{
+  "enchantment.qianmospeed.travel_blessings": "旅の祝福",
+  "enchantment.qianmospeed.travel_blessings.desc": "道を歩いているときに大幅な速度ブーストを得ます",
+  
+  "qianmospeed.message.login.basic": "§6[阡陌疾旅] §fインテリジェント基本モードをロードしました (間隔: %s ticks)",
+  "qianmospeed.message.login.advanced": "§6[阡陌疾旅] §fRoadWeaver高度モードを有効にしました",
+  
+  "qianmospeed.message.speed.applied": "§a+ 速度ボーナスを適用しました (レベル: %s)",
+  "qianmospeed.message.speed.removed": "§c- 速度ボーナスを削除しました",
+  
+  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaverが検出されません、基本モードを使用します"
+}

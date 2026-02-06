@@ -1,0 +1,12 @@
+{
+  "enchantment.qianmospeed.travel_blessings": "여행의 축복",
+  "enchantment.qianmospeed.travel_blessings.desc": "도로에서 걸을 때 상당한 속도 향상을 얻습니다",
+  
+  "qianmospeed.message.login.basic": "§6[阡陌疾旅] §f지능형 기본 모드 로드됨 (간격: %s ticks)",
+  "qianmospeed.message.login.advanced": "§6[阡陌疾旅] §fRoadWeaver 고급 모드 활성화됨",
+  
+  "qianmospeed.message.speed.applied": "§a+ 속도 보너스 적용됨 (등급: %s)",
+  "qianmospeed.message.speed.removed": "§c- 속도 보너스 제거됨",
+  
+  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver가 감지되지 않음, 기본 모드 사용"
+}

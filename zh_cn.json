@@ -1,0 +1,12 @@
+{
+  "enchantment.qianmospeed.travel_blessings": "旅行的祝福",
+  "enchantment.qianmospeed.travel_blessings.desc": "在道路上行走时获得显著的速度提升",
+  
+  "qianmospeed.message.login.basic": "§6[阡陌疾旅] §f智能基础模式已加载 (间隔: %s ticks)",
+  "qianmospeed.message.login.advanced": "§6[阡陌疾旅] §fRoadWeaver高级模式已启用",
+  
+  "qianmospeed.message.speed.applied": "§a+ 速度加成已应用 (等级: %s)",
+  "qianmospeed.message.speed.removed": "§c- 速度加成已移除",
+  
+  "qianmospeed.message.roadweaver.not_found": "§e未检测到RoadWeaver，使用基础模式"
+}

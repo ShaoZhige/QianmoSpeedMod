@@ -1,0 +1,12 @@
+{
+  "enchantment.qianmospeed.travel_blessings": "Bénédiction du Voyageur",
+  "enchantment.qianmospeed.travel_blessings.desc": "Accorde un boost de vitesse significatif en marchant sur les routes",
+  
+  "qianmospeed.message.login.basic": "§6[阡陌疾旅] §fMode de base intelligent chargé (intervalle: %s ticks)",
+  "qianmospeed.message.login.advanced": "§6[阡陌疾旅] §fMode avancé RoadWeaver activé",
+  
+  "qianmospeed.message.speed.applied": "§a+ Bonus de vitesse appliqué (niveau: %s)",
+  "qianmospeed.message.speed.removed": "§c- Bonus de vitesse retiré",
+  
+  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver non détecté, utilisation du mode de base"
+}
