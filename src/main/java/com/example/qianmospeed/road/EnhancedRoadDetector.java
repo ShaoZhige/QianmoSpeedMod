@@ -29,12 +29,10 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
             }
             return false;
         }
-
         if (SpeedModConfig.isDebugMessagesEnabled()) {
             String blockId = getBlockId(level, pos);
             QianmoSpeedMod.LOGGER.debug("位置 {} 的方块 {} 在高级道路列表中 ✓", pos, blockId);
         }
-
         // 2. 检查缓存
         if (simpleCache.containsKey(pos)) {
             boolean cached = simpleCache.get(pos);
@@ -43,7 +41,6 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
             }
             return cached;
         }
-
         // 3. 根据方块类型选择检测方法
         String blockId = getBlockId(level, pos);
         boolean isPathBlock = blockId.contains("path");
@@ -53,14 +50,14 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
         }
         boolean result;
         if (isPathBlock) {
-            // 土径等路径方块：简化检测
-            result = checkPathBlock(level, pos);
+            // 🔧 修复：土径需要严格检测，避免单个方块被误判
+            result = checkPathBlockStrict(level, pos);
             if (SpeedModConfig.isDebugMessagesEnabled()) {
                 QianmoSpeedMod.LOGGER.debug("路径方块检测结果: {}", result);
             }
         } else if (isNaturalBlock) {
-            // 自然方块（土、砂、砾石等）：宽松检测
-            result = checkNaturalBlockSimple(level, pos);
+            //修改：自然方块需要严格检查
+            result = checkNaturalBlockStrict(level, pos);
             if (SpeedModConfig.isDebugMessagesEnabled()) {
                 QianmoSpeedMod.LOGGER.debug("自然方块检测结果: {}", result);
             }
@@ -71,7 +68,6 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
                 QianmoSpeedMod.LOGGER.debug("标准方块检测结果: {}", result);
             }
         }
-
         // 4. 对于完整方块，应用方向检测（超大连接判断）
         if (result && isFullHeightBlock(level, pos)) {
             boolean beforeDirectional = result;
@@ -80,21 +76,136 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
                 QianmoSpeedMod.LOGGER.debug("方向检测: 之前={}, 之后={}", beforeDirectional, result);
             }
         }
-
         // 5. 更新缓存
         if (simpleCache.size() >= CACHE_SIZE) {
             simpleCache.clear();
         }
         simpleCache.put(pos, result);
-
         if (SpeedModConfig.isDebugMessagesEnabled()) {
             QianmoSpeedMod.LOGGER.debug("高级检测最终结果: 位置={}, 方块={}, 结果={} (类型: {})",
                     pos, blockId, result,
                     isPathBlock ? "路径" : (isNaturalBlock ? "自然" : "标准"));
             QianmoSpeedMod.LOGGER.debug("==================================================");
         }
-
         return result;
+    }
+
+    /**
+     * 🔧 修复：路径方块严格检测
+     * 避免单个土径方块被误判为道路
+     */
+    private boolean checkPathBlockStrict(Level level, BlockPos pos) {
+        if (SpeedModConfig.isDebugMessagesEnabled()) {
+            QianmoSpeedMod.LOGGER.debug("  → 路径方块严格检查: 位置 {}", pos);
+        }
+
+        // 条件1：需要至少2个相邻道路方块（从1个改为2个）
+        int adjacentRoads = countAdjacentRoadBlocks(level, pos);
+        
+        // 条件2：如果是土径，需要检查是否形成线性结构
+        String blockId = getBlockId(level, pos);
+        boolean isDirtPath = blockId.contains("dirt_path");
+        
+        if (isDirtPath) {
+            // 对于土径，需要更严格的检查
+            // 1. 至少2个相邻道路方块
+            // 2. 并且形成连续道路
+            if (adjacentRoads >= 2) {
+                // 检查是否形成线性道路
+                boolean formsLine = checkFormsLinearRoad(level, pos);
+                if (formsLine) {
+                    if (SpeedModConfig.isDebugMessagesEnabled()) {
+                        QianmoSpeedMod.LOGGER.debug("  → 土径形成线性道路，通过");
+                    }
+                    return true;
+                }
+            }
+            
+            // 备用检查：被其他道路方块包围
+            int surroundingRoads = countSurroundingRoadBlocks(level, pos);
+            if (surroundingRoads >= 6) {
+                if (SpeedModConfig.isDebugMessagesEnabled()) {
+                    QianmoSpeedMod.LOGGER.debug("  → 土径被 {} 个道路方块包围，通过", surroundingRoads);
+                }
+                return true;
+            }
+            
+            if (SpeedModConfig.isDebugMessagesEnabled()) {
+                QianmoSpeedMod.LOGGER.debug("  → 土径不满足条件（相邻={}, 形成线性={}），不通过",
+                        adjacentRoads, checkFormsLinearRoad(level, pos));
+            }
+            return false;
+        } else {
+            // 其他路径方块（如果有）：保持原有逻辑但更严格
+            if (adjacentRoads >= 2) {
+                if (SpeedModConfig.isDebugMessagesEnabled()) {
+                    QianmoSpeedMod.LOGGER.debug("  → 有 {} 个相邻道路方块（≥2），通过", adjacentRoads);
+                }
+                return true;
+            }
+            
+            int surroundingRoads = countSurroundingRoadBlocks(level, pos);
+            if (surroundingRoads >= 6) {
+                if (SpeedModConfig.isDebugMessagesEnabled()) {
+                    QianmoSpeedMod.LOGGER.debug("  → 周围有 {} 个道路方块（≥6），通过", surroundingRoads);
+                }
+                return true;
+            }
+            
+            if (SpeedModConfig.isDebugMessagesEnabled()) {
+                QianmoSpeedMod.LOGGER.debug("  → 周围道路方块不足（相邻={}, 周围={}），不通过",
+                        adjacentRoads, surroundingRoads);
+            }
+            return false;
+        }
+    }
+    
+    /**
+     * 检查是否形成线性道路
+     */
+    private boolean checkFormsLinearRoad(Level level, BlockPos pos) {
+        // 检查X方向
+        int xLength = 1;
+        xLength += checkDirectionSameType(level, pos, true, true, getBlockId(level, pos));
+        xLength += checkDirectionSameType(level, pos, true, false, getBlockId(level, pos));
+        
+        // 检查Z方向
+        int zLength = 1;
+        zLength += checkDirectionSameType(level, pos, false, true, getBlockId(level, pos));
+        zLength += checkDirectionSameType(level, pos, false, false, getBlockId(level, pos));
+        
+        // 至少一个方向达到最小长度
+        int minLength = SpeedModConfig.getMinDirectionalLength();
+        return xLength >= minLength || zLength >= minLength;
+    }
+    
+    /**
+     * 检查单个方向（相同类型方块）
+     */
+    private int checkDirectionSameType(Level level, BlockPos startPos, boolean checkX,
+            boolean positive, String targetBlockId) {
+        int length = 0;
+        int direction = positive ? 1 : -1;
+        int maxCheck = SpeedModConfig.getMaxDirectionalLength() * 2;
+        BlockPos currentPos = startPos;
+        
+        for (int i = 1; i <= maxCheck; i++) {
+            if (checkX) {
+                currentPos = currentPos.offset(direction, 0, 0);
+            } else {
+                currentPos = currentPos.offset(0, 0, direction);
+            }
+            
+            BlockState state = level.getBlockState(currentPos);
+            String blockId = ForgeRegistries.BLOCKS.getKey(state.getBlock()).toString();
+            
+            // 只计算相同类型的方块
+            if (!blockId.equals(targetBlockId)) {
+                break;
+            }
+            length++;
+        }
+        return length;
     }
 
     /**
@@ -109,7 +220,6 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
             }
             return true;
         }
-
         // 检查X方向连续长度
         int xLength = calculateDirectionalLength(level, pos, true);
         // 检查Z方向连续长度
@@ -156,15 +266,12 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
      */
     private int calculateDirectionalLength(Level level, BlockPos pos, boolean checkX) {
         int totalLength = 1; // 包括当前位置
-
         // 检查正方向
         int positiveLength = checkDirection(level, pos, checkX, true);
         totalLength += positiveLength;
-
         // 检查负方向
         int negativeLength = checkDirection(level, pos, checkX, false);
         totalLength += negativeLength;
-
         return totalLength;
     }
 
@@ -175,9 +282,7 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
         int length = 0;
         int direction = positive ? 1 : -1;
         int maxCheck = SpeedModConfig.getMaxDirectionalLength() * 3; // 扩大搜索范围
-
         BlockPos currentPos = startPos;
-
         for (int i = 1; i <= maxCheck; i++) {
             // 移动到下一个位置
             if (checkX) {
@@ -185,15 +290,12 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
             } else {
                 currentPos = currentPos.offset(0, 0, direction);
             }
-
             // 只检查完整方块的道路
             if (!isAdvancedRoadBlock(level, currentPos) || !isFullHeightBlock(level, currentPos)) {
                 break;
             }
-
             length++;
         }
-
         return length;
     }
 
@@ -240,88 +342,128 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
     }
 
     /**
-     * 检查路径方块（土径等）- 最宽松
+     *修改：检查自然方块（严格版本，无方向检测）
      */
-    private boolean checkPathBlock(Level level, BlockPos pos) {
-        // 路径方块总是被认为是道路
+    private boolean checkNaturalBlockStrict(Level level, BlockPos pos) {
         if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("路径方块检查: 位置 {} 是路径方块，直接返回 true", pos);
+            QianmoSpeedMod.LOGGER.debug("  → 自然方块严格检查开始");
         }
-        return true;
+
+        // 策略1: 至少需要2个相邻道路方块（形成线性道路）
+        int adjacentRoads = countAdjacentRoadBlocks(level, pos);
+
+        if (adjacentRoads >= 2) {
+            if (SpeedModConfig.isDebugMessagesEnabled()) {
+                QianmoSpeedMod.LOGGER.debug("  → 有 {} 个相邻道路方块（≥2），通过", adjacentRoads);
+            }
+            return true;
+        }
+
+        // 策略2: 周围至少6个道路方块（被包围）
+        int surroundingRoads = countSurroundingRoadBlocks(level, pos);
+
+        if (surroundingRoads >= 6) {
+            if (SpeedModConfig.isDebugMessagesEnabled()) {
+                QianmoSpeedMod.LOGGER.debug("  → 周围有 {} 个道路方块（≥6），通过", surroundingRoads);
+            }
+            return true;
+        }
+
+        if (SpeedModConfig.isDebugMessagesEnabled()) {
+            QianmoSpeedMod.LOGGER.debug("  → 不满足道路特征（相邻={}, 周围={}），不通过",
+                    adjacentRoads, surroundingRoads);
+        }
+        return false;
     }
 
     /**
-     * 检查自然方块 - 极简版本
-     */
-    private boolean checkNaturalBlockSimple(Level level, BlockPos pos) {
-        if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("========== 自然方块检测开始 ==========");
-            QianmoSpeedMod.LOGGER.debug("检查位置: {}", pos);
-            String blockId = getBlockId(level, pos);
-            QianmoSpeedMod.LOGGER.debug("方块ID: {}", blockId);
-        }
-        // 自然方块直接返回 true
-        // 理由：
-        // 1. 已经通过 isAdvancedRoadBlock() 检查，确认是配置中的道路方块
-        // 2. 高级模式的目的是更宽松的检测，不应该再添加额外限制
-        // 3. 方向检测会在后续的 applyDirectionalDetection() 中进行
-        if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("自然方块检测: 直接返回 true（已通过高级方块列表检查）");
-            QianmoSpeedMod.LOGGER.debug("==========================================");
-        }
-        return true;
-    }
-
-    /**
-     * 检查标准方块 - 严格检测，只判定真正在道路上的方块
+     * 🔧 修复：检查标准方块 - 需要方向检测
      */
     private boolean checkStandardBlock(Level level, BlockPos pos) {
         if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("========== 标准方块检测开始 ==========");
-            QianmoSpeedMod.LOGGER.debug("检查位置: {}", pos);
+            QianmoSpeedMod.LOGGER.debug("标准方块检查开始: 位置 {}", pos);
         }
+
+        // 检查是否是完整方块
+        boolean isFullBlock = isFullHeightBlock(level, pos);
+        
+        // 对于完整方块，应用方向检测
+        if (isFullBlock && SpeedModConfig.isDirectionalDetectionEnabled()) {
+            boolean directionalResult = applyDirectionalDetection(level, pos);
+            if (directionalResult) {
+                // 方向检测通过，还需要检查相邻道路
+                int adjacentRoads = countAdjacentRoadBlocks(level, pos);
+                if (adjacentRoads >= 2) {
+                    if (SpeedModConfig.isDebugMessagesEnabled()) {
+                        QianmoSpeedMod.LOGGER.debug("标准方块检测: 方向检测通过 + 有 {} 个相邻道路方块，通过", adjacentRoads);
+                    }
+                    return true;
+                }
+            } else {
+                // 方向检测失败
+                if (SpeedModConfig.isDebugMessagesEnabled()) {
+                    QianmoSpeedMod.LOGGER.debug("标准方块检测: 方向检测失败，不通过");
+                }
+                return false;
+            }
+        }
+        
+        // 非完整方块或未启用方向检测：使用原有逻辑
         // 检查相邻方块（四方向）
-        int adjacentRoads = 0;
+        int adjacentRoads = countAdjacentRoadBlocks(level, pos);
+        // 需要至少2个相邻道路方块
+        if (adjacentRoads >= 2) {
+            if (SpeedModConfig.isDebugMessagesEnabled()) {
+                QianmoSpeedMod.LOGGER.debug("标准方块检测: 有 {} 个相邻道路方块（≥2），通过", adjacentRoads);
+            }
+            return true;
+        }
+        // 检查3x3区域
+        int surroundingRoads = countSurroundingRoadBlocks(level, pos);
+        if (surroundingRoads >= 6) {
+            if (SpeedModConfig.isDebugMessagesEnabled()) {
+                QianmoSpeedMod.LOGGER.debug("标准方块检测: 周围有 {} 个道路方块（≥6），通过", surroundingRoads);
+            }
+            return true;
+        }
+        if (SpeedModConfig.isDebugMessagesEnabled()) {
+            QianmoSpeedMod.LOGGER.debug("标准方块检测: 周围道路方块不足（相邻={}, 周围={}），不通过",
+                    adjacentRoads, surroundingRoads);
+        }
+        return false;
+    }
+
+    /**
+     * 统计相邻道路方块数量（东南西北4个方向）
+     */
+    private int countAdjacentRoadBlocks(Level level, BlockPos pos) {
+        int count = 0;
         BlockPos[] adjacentPositions = {
                 pos.north(), pos.south(), pos.east(), pos.west()
         };
         for (BlockPos adjPos : adjacentPositions) {
             if (isAdvancedRoadBlock(level, adjPos)) {
-                adjacentRoads++;
+                count++;
             }
         }
-        // 需要至少1个相邻道路方块
-        if (adjacentRoads >= 1) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("标准方块检测: 位置 {} 有 {} 个相邻道路方块（≥1）",
-                        pos, adjacentRoads);
-            }
-            return true;
-        }
-        // 条件2：检查3x3区域
-        int roadCount = 0;
+        return count;
+    }
+
+    /**
+     * 统计周围道路方块数量（3x3区域，不包括中心）
+     */
+    private int countSurroundingRoadBlocks(Level level, BlockPos pos) {
+        int count = 0;
         for (int dx = -1; dx <= 1; dx++) {
             for (int dz = -1; dz <= 1; dz++) {
-                if (dx == 0 && dz == 0) {
+                if (dx == 0 && dz == 0)
                     continue;
-                }
                 if (isAdvancedRoadBlock(level, pos.offset(dx, 0, dz))) {
-                    roadCount++;
+                    count++;
                 }
             }
         }
-        if (roadCount >= 6) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("标准方块检测: 位置 {} 周围有 {} 个道路方块（≥6）",
-                        pos, roadCount);
-            }
-            return true;
-        }
-        if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("标准方块检测: 位置 {} 未通过检测（相邻={}, 周围={}）",
-                    pos, adjacentRoads, roadCount);
-        }
-        return false;
+        return count;
     }
 
     /**
@@ -331,15 +473,6 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
         BlockState state = level.getBlockState(pos);
         net.minecraft.world.level.block.Block block = state.getBlock();
         boolean isRoad = SpeedModConfig.isAdvancedRoadBlock(block);
-        // 🔍 添加详细调试日志（仅在非常详细的调试模式下）
-        // 注释掉以减少日志量，需要时可以取消注释
-        /*
-         * if (SpeedModConfig.isDebugMessagesEnabled()) {
-         * String blockId = ForgeRegistries.BLOCKS.getKey(block).toString();
-         * QianmoSpeedMod.LOGGER.debug("高级方块检查: 位置={}, 方块={}, 是道路={}",
-         * pos, blockId, isRoad);
-         * }
-         */
         return isRoad;
     }
 

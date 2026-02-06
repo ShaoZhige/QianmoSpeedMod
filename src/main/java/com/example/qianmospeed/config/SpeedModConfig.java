@@ -96,8 +96,8 @@ public class SpeedModConfig {
                         "Interval for checking if player is on road (in ticks)",
                         "20 tick = 1秒/20 ticks = 1 second",
                         "最小值/Minimum: 1, 最大值/Maximum: 200",
-                        "默认/Default: 40 (2秒/2 seconds)")
-                .defineInRange("checkInterval", 40, 1, 200);
+                        "默认/Default: 20 (1秒/1 seconds)")
+                .defineInRange("checkInterval", 20, 1, 200);
 
         builder.pop();
 
@@ -138,12 +138,14 @@ public class SpeedModConfig {
 
         DIRECTIONAL_DETECTION = builder
                 .comment(
-                        "启用方向检测功能（仅基础模式有效）",
-                        "Enable directional detection (only effective in basic mode)",
-                        "功能：检查道路在X或Z方向上的连续长度",
-                        "Function: Check continuous length of road in X or Z direction",
+                        "启用方向检测功能",
+                        "Enable directional detection",
+                        "功能：检查道路在X和Z方向上的连续长度",
+                        "Function: Check continuous length of road in both X and Z directions",
                         "用于区分道路和地板/广场",
                         "Used to distinguish roads from floors/plazas",
+                        "X和Z方向都必须满足最小长度要求",
+                        "Both X and Z directions must meet the minimum length requirement",
                         "默认/Default: true")
                 .define("directionalDetection", true);
 
@@ -151,8 +153,12 @@ public class SpeedModConfig {
                 .comment(
                         "道路最小连续长度（格数）",
                         "Minimum continuous length for roads (in blocks)",
-                        "小于此值被视为地板/广场/装饰",
-                        "Values less than this are considered floors/plazas/decorations",
+                        "X和Z方向都必须满足此长度",
+                        "Both X and Z directions must meet this length",
+                        "例如：设置为2时，需要至少2x2的网格才被视为道路",
+                        "Example: When set to 2, at least 2x2 grid is required to be considered a road",
+                        "小于此值被视为装饰/小平台",
+                        "Values less than this are considered decorations/small platforms",
                         "范围/Range: 1-20",
                         "默认/Default: 2")
                 .defineInRange("minDirectionalLength", 2, 1, 20);
@@ -161,13 +167,15 @@ public class SpeedModConfig {
                 .comment(
                         "道路最大连续长度（格数）",
                         "Maximum continuous length for roads (in blocks)",
-                        "大于此值被视为地板/广场（无限延伸）",
+                        "超过此值被视为地板/广场（无限延伸）",
                         "Values greater than this are considered floors/plazas (infinite extension)",
+                        "如果两个方向都超过此值，则判定为地板",
+                        "If both directions exceed this value, it's considered a floor",
                         "范围/Range: 1-100",
-                        "注意：此设置仅影响基础模式",
-                        "Note: This setting only affects basic mode",
-                        "默认/Default: 5")
-                .defineInRange("maxDirectionalLength", 5, 1, 100);
+                        "注意：此设置影响所有使用方向检测的模式",
+                        "Note: This setting affects all modes using directional detection",
+                        "默认/Default: 4")
+                .defineInRange("maxDirectionalLength", 4, 1, 100);
 
         builder.pop();
 
@@ -182,8 +190,8 @@ public class SpeedModConfig {
                         "Features include: road network detection, continuity checking, etc.",
                         "检测到专业道路模组（如阡陌交通、Road Architect等）会自动启用",
                         "Professional road mods (like RoadWeaver, Road Architect) will auto-enable",
-                        "注意：高级模式不使用方向检测",
-                        "Note: Advanced mode does not use directional detection",
+                        "注意：高级模式使用不同的检测规则（相邻方块计数）",
+                        "Note: Advanced mode uses different detection rules (adjacent block counting)",
                         "默认/Default: false")
                 .define("advancedFeaturesEnabled", false);
 
@@ -222,6 +230,7 @@ public class SpeedModConfig {
                         Arrays.asList(
                                 "minecraft:dirt_path",
                                 "minecraft:stone_bricks",
+                                "minecraft:oak_planks",
                                 "minecraft:sandstone",
                                 "minecraft:mud_bricks",
                                 "minecraft:packed_mud",
@@ -290,7 +299,9 @@ public class SpeedModConfig {
                         Arrays.asList(
                                 "minecraft:dirt_path",
                                 "minecraft:dirt",
+                                "minecraft:cobblestone",
                                 "minecraft:stone_bricks",
+                                "minecraft:smooth_sandstone",
                                 "minecraft:sandstone",
                                 "minecraft:mud_bricks",
                                 "minecraft:packed_mud",
@@ -351,7 +362,18 @@ public class SpeedModConfig {
                                 "minecraft:red_sand",
                                 "minecraft:terracotta",
                                 "minecraft:mud",
-                                "minecraft:muddy_mangrove_roots"),
+                                "minecraft:muddy_mangrove_roots",
+                                "minecraft:oak_planks",
+                                "minecraft:spruce_planks",
+                                "minecraft:birch_planks",
+                                "minecraft:jungle_planks",
+                                "minecraft:acacia_planks",
+                                "minecraft:dark_oak_planks",
+                                "minecraft:mangrove_planks",
+                                "minecraft:cherry_planks",
+                                "minecraft:bamboo_planks",
+                                "minecraft:crimson_planks",
+                                "minecraft:warped_planks"),
                         o -> o instanceof String);
 
         builder.pop();
@@ -737,6 +759,8 @@ public class SpeedModConfig {
                 "minecraft:sandstone",
                 "minecraft:mud_bricks",
                 "minecraft:packed_mud",
+                "minecraft:oak_planks",
+                "minecraft:oak_planks",
                 "minecraft:mossy_stone_bricks",
                 "minecraft:cracked_stone_bricks",
                 "minecraft:polished_blackstone_bricks",
@@ -785,7 +809,9 @@ public class SpeedModConfig {
         advancedRoadBlockIds.addAll(Arrays.asList(
                 "minecraft:dirt_path",
                 "minecraft:dirt",
+                "minecraft:cobblestone",
                 "minecraft:stone_bricks",
+                "minecraft:smooth_sandstone",
                 "minecraft:sandstone",
                 "minecraft:mud_bricks",
                 "minecraft:packed_mud",
@@ -846,7 +872,17 @@ public class SpeedModConfig {
                 "minecraft:red_sand",
                 "minecraft:terracotta",
                 "minecraft:mud",
-                "minecraft:muddy_mangrove_roots"));
+                "minecraft:muddy_mangrove_roots",
+                "minecraft:oak_planks",
+                "minecraft:spruce_planks",
+                "minecraft:birch_planks",
+                "minecraft:jungle_planks",
+                "minecraft:acacia_planks",
+                "minecraft:dark_oak_planks",
+                "minecraft:mangrove_planks",
+                "minecraft:cherry_planks",
+                "minecraft:bamboo_planks",
+                "minecraft:crimson_planks",
+                "minecraft:warped_planks"));
     }
-
 }
