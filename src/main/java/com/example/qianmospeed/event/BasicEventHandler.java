@@ -3,7 +3,10 @@ package com.example.qianmospeed.event;
 import com.example.qianmospeed.QianmoSpeedMod;
 import com.example.qianmospeed.config.SpeedModConfig;
 import com.example.qianmospeed.road.RoadDetectionFactory;
+import com.example.qianmospeed.util.LocalizationHelper;
+import com.example.qianmospeed.util.RoadWeaverH2Helper;
 import net.minecraft.core.BlockPos;
+import net.minecraft.server.level.ServerLevel;
 import net.minecraft.network.chat.Component;
 import net.minecraft.server.level.ServerPlayer;
 import net.minecraft.world.entity.EquipmentSlot;
@@ -22,32 +25,37 @@ import net.minecraftforge.event.entity.player.PlayerEvent;
 import net.minecraftforge.eventbus.api.SubscribeEvent;
 import net.minecraftforge.fml.common.Mod;
 import net.minecraftforge.registries.ForgeRegistries;
+
 import java.util.*;
 
 @Mod.EventBusSubscriber(modid = QianmoSpeedMod.MODID, bus = Mod.EventBusSubscriber.Bus.FORGE)
 public class BasicEventHandler {
-    // 用于跟踪上次检查的tick
-    private static final Map<UUID, Integer> lastCheckTicks = new HashMap<>();
-    // 用于存储玩家当前的速度效果级别
+    // ========== 独立的间隔追踪 ==========
+    private static final Map<UUID, Integer> lastEnchantmentCheckTicks = new HashMap<>();
+    private static final Map<UUID, Integer> lastPermanentCheckTicks = new HashMap<>();
+
+    // 玩家状态追踪
     private static final Map<UUID, Integer> playerSpeedLevels = new HashMap<>();
-    //用于存储稳定的速度级别（防抖动）
     private static final Map<UUID, Integer> playerStableSpeedLevels = new HashMap<>();
-    // 用于跟踪玩家腾空状态
     private static final Map<UUID, AirborneState> playerAirborneStates = new HashMap<>();
-    // 属性修饰器的UUID
+    private static final Map<UUID, Boolean> playerPermanentSpeedActive = new HashMap<>();
+
+    // UUID
     private static final UUID TRAVEL_BLESSINGS_MODIFIER_UUID = UUID
             .nameUUIDFromBytes((QianmoSpeedMod.MODID + ":travel_blessings_speed_modifier").getBytes());
+    private static final UUID PERMANENT_SPEED_MODIFIER_UUID = UUID
+            .nameUUIDFromBytes((QianmoSpeedMod.MODID + ":permanent_road_speed_modifier").getBytes());
 
     /**
-     *玩家腾空状态跟踪类（增强版 - 防止频繁切换）
+     * 玩家腾空状态跟踪类
      */
     private static class AirborneState {
-        boolean wasOnRoad; // 腾空前是否在道路上
-        int roadLevel; // 道路等级
-        long airborneStartTime; // 腾空开始时间
-        BlockPos takeoffPosition; // 起飞位置
-        int consecutiveAirborneTicks; // 连续腾空的tick数
-        int consecutiveGroundTicks; //连续在地面的tick数
+        boolean wasOnRoad;
+        int roadLevel;
+        long airborneStartTime;
+        BlockPos takeoffPosition;
+        int consecutiveAirborneTicks;
+        int consecutiveGroundTicks;
 
         AirborneState(boolean wasOnRoad, int roadLevel, BlockPos takeoffPos) {
             this.wasOnRoad = wasOnRoad;
@@ -55,26 +63,24 @@ public class BasicEventHandler {
             this.airborneStartTime = System.currentTimeMillis();
             this.takeoffPosition = takeoffPos;
             this.consecutiveAirborneTicks = 0;
-            this.consecutiveGroundTicks = 0; //初始化
+            this.consecutiveGroundTicks = 0;
         }
 
         void incrementAirborneTick() {
             consecutiveAirborneTicks++;
-            consecutiveGroundTicks = 0; //腾空时重置地面计数
+            consecutiveGroundTicks = 0;
         }
 
-        void incrementGroundTick() { //新增方法
+        void incrementGroundTick() {
             consecutiveGroundTicks++;
         }
 
         boolean isValid() {
-            //腾空状态最多有效60 ticks（3秒）
-            return consecutiveAirborneTicks <= 60;
+            return consecutiveAirborneTicks <= 60; // 3秒
         }
 
-        boolean shouldEndAirborne() { //判断是否应该结束腾空状态
-            // 在地面超过2 tick（约0.1秒）才确认落地
-            return consecutiveGroundTicks >= 2;
+        boolean shouldEndAirborne() {
+            return consecutiveGroundTicks >= 2; // 0.1秒
         }
     }
 
@@ -87,181 +93,135 @@ public class BasicEventHandler {
                 blockId.contains("stairs") ||
                 blockId.contains("carpet") ||
                 blockId.contains("snow") ||
-                blockId.contains("layer");
+                blockId.contains("layer") ||
+                blockId.contains("farmland") ||
+                blockId.contains("path");
     }
 
-    /**
-     * 多层检测
-     */
+    // ========== 核心：统一道路检测方法（附魔和常驻共用）==========
     private static boolean checkRoadWithMultiLayer(Level level, Player player,
             RoadDetectionFactory.IRoadDetector detector) {
-        // 优先级1：检查玩家脚下的方块
         BlockPos belowPlayer = player.blockPosition().below();
         if (detector.isOnRoad(level, belowPlayer)) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                BlockState state = level.getBlockState(belowPlayer);
-                QianmoSpeedMod.LOGGER.debug("玩家 {} 在脚下方块 {} 检测到道路",
-                        player.getName().getString(),
-                        ForgeRegistries.BLOCKS.getKey(state.getBlock()));
-            }
             return true;
         }
-        // 优先级2：检查玩家当前位置（对于站在台阶上的情况）
         BlockPos currentPos = player.blockPosition();
         if (detector.isOnRoad(level, currentPos)) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                BlockState state = level.getBlockState(currentPos);
-                QianmoSpeedMod.LOGGER.debug("玩家 {} 在当前位置 {} 检测到道路",
-                        player.getName().getString(),
-                        ForgeRegistries.BLOCKS.getKey(state.getBlock()));
-            }
             return true;
         }
-        // 优先级3：检查精确脚部位置
         BlockPos feetPos = BlockPos.containing(player.getX(), player.getY() - 0.2, player.getZ());
         if (detector.isOnRoad(level, feetPos)) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                BlockState state = level.getBlockState(feetPos);
-                QianmoSpeedMod.LOGGER.debug("玩家 {} 在精确脚部位置 {} 检测到道路",
-                        player.getName().getString(),
-                        ForgeRegistries.BLOCKS.getKey(state.getBlock()));
-            }
             return true;
         }
-        // 优先级4：检查脚部位置下方
         if (detector.isOnRoad(level, feetPos.below())) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                BlockState state = level.getBlockState(feetPos.below());
-                QianmoSpeedMod.LOGGER.debug("玩家 {} 在脚部下方 {} 检测到道路",
-                        player.getName().getString(),
-                        ForgeRegistries.BLOCKS.getKey(state.getBlock()));
-            }
             return true;
-        }
-        if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("玩家 {} 在所有位置都未检测到道路", player.getName().getString());
         }
         return false;
     }
 
+    // ========== 统一腾空维持检查（附魔和常驻共用）==========
+    private static boolean shouldMaintainSpeedBonus(Player player, RoadDetectionFactory.IRoadDetector detector) {
+        UUID playerId = player.getUUID();
+        AirborneState state = playerAirborneStates.get(playerId);
+
+        // 如果没有腾空状态，不维持
+        if (state == null) {
+            return false;
+        }
+
+        // 如果起跳时不在道路上，不维持
+        if (!state.wasOnRoad) {
+            return false;
+        }
+
+        // 腾空时间太长，不维持
+        if (!state.isValid()) {
+            return false;
+        }
+
+        // 如果在地面，检查是否还在道路上
+        if (player.onGround()) {
+            BlockPos belowPlayer = player.blockPosition().below();
+            boolean onRoadNow = detector.isOnRoad(player.level(), belowPlayer);
+
+            // 需要连续2 tick不在道路才移除
+            if (!onRoadNow) {
+                if (state.consecutiveGroundTicks >= 2) {
+                    playerAirborneStates.remove(playerId);
+                    return false;
+                }
+                // 刚落地，还在第一 tick，继续维持
+                return true;
+            }
+            return true;
+        }
+
+        // 在空中，维持加速
+        return true;
+    }
+
     /**
-     *更新玩家腾空状态（防止频繁切换）
+     * 更新腾空状态 - 附魔和常驻共用
      */
     private static void updateAirborneState(Player player, boolean isOnRoad, int roadLevel, BlockPos currentPos) {
         UUID playerId = player.getUUID();
-        // 判断玩家是否在腾空状态（更精确的判断）
         boolean isAirborne = !player.onGround() &&
                 !player.isInWater() &&
                 !player.isInLava() &&
                 !player.getAbilities().flying &&
                 !player.isPassenger() &&
                 !player.isSwimming();
+
         AirborneState state = playerAirborneStates.get(playerId);
+
         if (isAirborne) {
-            // 玩家在腾空状态
             if (state == null) {
-                // 新的腾空状态：记录腾空前的道路状态
+                // 重要：起跳时记录是否在道路上
                 state = new AirborneState(isOnRoad, roadLevel, currentPos);
                 playerAirborneStates.put(playerId, state);
-                if (SpeedModConfig.isDebugMessagesEnabled()) {
-                    QianmoSpeedMod.LOGGER.debug("玩家 {} 开始腾空，起飞位置: {}, 道路状态: {}, 等级: {}",
-                            player.getName().getString(), currentPos, isOnRoad, roadLevel);
+
+                if (SpeedModConfig.isDebugMessagesEnabled() && isOnRoad) {
+                    QianmoSpeedMod.LOGGER.debug("玩家 {} 从道路起跳，将维持加速", player.getName().getString());
                 }
             } else {
-                // 已经在腾空，更新状态
                 state.incrementAirborneTick();
-                // 如果当前检测到道路，更新腾空前的道路状态
+                // 腾空中如果检测到道路，更新状态（比如从空中落到道路上）
                 if (isOnRoad && roadLevel > 0) {
                     state.wasOnRoad = true;
-                    state.roadLevel = roadLevel;
-                    if (SpeedModConfig.isDebugMessagesEnabled()) {
-                        QianmoSpeedMod.LOGGER.debug("玩家 {} 腾空中检测到道路，更新状态: 等级={}",
-                                player.getName().getString(), roadLevel);
-                    }
+                    state.roadLevel = Math.max(state.roadLevel, roadLevel);
                 }
             }
         } else {
-            // 玩家在地面
             if (state != null) {
-                //增加地面计数
                 state.incrementGroundTick();
-                //修改：只有确认落地（连续2 tick在地面）才清理状态
+                // 需要连续2 tick在地面才结束腾空状态
                 if (state.shouldEndAirborne()) {
-                    if (SpeedModConfig.isDebugMessagesEnabled()) {
-                        QianmoSpeedMod.LOGGER.debug("玩家 {} 结束腾空，持续 {} ticks",
-                                player.getName().getString(), state.consecutiveAirborneTicks);
-                    }
                     playerAirborneStates.remove(playerId);
                 }
             }
         }
     }
 
-    /**
-     *检查是否应该维持速度加成（腾空时）
-     */
-    private static boolean shouldMaintainSpeedBonus(Player player, RoadDetectionFactory.IRoadDetector detector) {
-        UUID playerId = player.getUUID();
-        AirborneState state = playerAirborneStates.get(playerId);
-        // 检查腾空状态是否有效
-        if (state == null) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("  腾空维持检查: 没有腾空状态");
-            }
-            return false;
-        }
-        if (!state.isValid()) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("  腾空维持检查: 腾空时间过长（{} ticks）", state.consecutiveAirborneTicks);
-            }
-            return false;
-        }
-        if (!state.wasOnRoad || state.roadLevel <= 0) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("  腾空维持检查: 起飞前不在道路上");
-            }
-            return false;
-        }
-        //如果玩家已经落地在非道路上，立即停止加成
-        if (player.onGround()) {
-            BlockPos belowPlayer = player.blockPosition().below();
-            boolean onRoadNow = detector.isOnRoad(player.level(), belowPlayer);
-            if (!onRoadNow) {
-                if (SpeedModConfig.isDebugMessagesEnabled()) {
-                    QianmoSpeedMod.LOGGER.debug("  腾空维持检查: 已落地在非道路上，停止加成");
-                }
-                playerAirborneStates.remove(playerId);
-                return false;
-            }
-        }
-        // 腾空时间在有效范围内，维持速度
-        if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("  腾空维持检查: 通过（等级={}, 已腾空={} ticks）",
-                    state.roadLevel, state.consecutiveAirborneTicks);
-        }
-        return true;
-    }
-
-    /**
-     * 确保完全清理玩家相关的所有数据
-     */
+    // ========== 清理玩家数据 ==========
     private static void cleanupPlayerData(Player player) {
         UUID playerId = player.getUUID();
-        // 1. 移除属性修饰器
+
+        QianmoSpeedMod.LOGGER.debug("清理玩家数据: {}", player.getName().getString());
+
+        // 移除实际效果
         removeSpeedAttribute(player);
-        // 2. 清理内存中的数据
+        removePermanentSpeedEffect(player);
+
+        // 清理内存状态
         playerSpeedLevels.remove(playerId);
-        playerStableSpeedLevels.remove(playerId); //新增
-        lastCheckTicks.remove(playerId);
+        playerStableSpeedLevels.remove(playerId);
+        playerPermanentSpeedActive.remove(playerId);
+        lastEnchantmentCheckTicks.remove(playerId);
+        lastPermanentCheckTicks.remove(playerId);
         playerAirborneStates.remove(playerId);
-        if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("清理玩家数据: {}", playerId);
-        }
     }
 
-    /**
-     * 检查属性是否包含指定UUID的修饰器
-     */
+    // ========== 属性修饰器工具方法 ==========
     private static boolean hasAttributeModifier(AttributeInstance attribute, UUID modifierId) {
         if (attribute == null)
             return false;
@@ -273,305 +233,11 @@ public class BasicEventHandler {
         return false;
     }
 
-    /**
-     * 玩家登录时发送欢迎消息
-     */
-    @SubscribeEvent
-    public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
-        // 先清理旧数据
-        cleanupPlayerData(event.getEntity());
-        if (!SpeedModConfig.isLoginMessagesEnabled())
-            return;
-        Player player = event.getEntity();
-        if (player instanceof ServerPlayer) {
-            ServerPlayer serverPlayer = (ServerPlayer) player;
-            StringBuilder welcomeMessage = new StringBuilder();
-            int checkInterval = SpeedModConfig.getCheckInterval();
-            // 基础信息
-            welcomeMessage.append("§a[阡陌疾旅] §f");
-            // 检测模式信息
-            boolean usingAdvanced = false;
-            try {
-                RoadDetectionFactory.IRoadDetector detector = RoadDetectionFactory.createDetector();
-                usingAdvanced = detector instanceof com.example.qianmospeed.road.EnhancedRoadDetector ||
-                        detector instanceof com.example.qianmospeed.road.HybridRoadDetector;
-            } catch (Exception e) {
-                usingAdvanced = SpeedModConfig.isAdvancedFeaturesEnabled() ||
-                        QianmoSpeedMod.hasDetectedProfessionalRoadMods();
-            }
-            if (usingAdvanced) {
-                welcomeMessage.append("增强模式已启用");
-                if (SpeedModConfig.isAdvancedFeaturesEnabled()) {
-                    welcomeMessage.append(" (用户配置)");
-                } else if (QianmoSpeedMod.hasDetectedProfessionalRoadMods()) {
-                    var proMods = QianmoSpeedMod.getDetectedProfessionalModNames();
-                    if (!proMods.isEmpty()) {
-                        welcomeMessage.append(" (检测到").append(proMods.get(0)).append(")");
-                    }
-                }
-            } else {
-                welcomeMessage.append("基础模式");
-            }
-            welcomeMessage.append(" (检查间隔: ").append(checkInterval).append(" ticks)\n");
-            // 检测到的模组信息
-            if (QianmoSpeedMod.hasDetectedRoadMods()) {
-                var modNames = QianmoSpeedMod.getDetectedRoadModNames();
-                welcomeMessage.append("§7检测到道路模组: ");
-                for (int i = 0; i < modNames.size(); i++) {
-                    if (i > 0)
-                        welcomeMessage.append(", ");
-                    welcomeMessage.append(modNames.get(i));
-                }
-                if (QianmoSpeedMod.hasDetectedProfessionalRoadMods() && !usingAdvanced) {
-                    welcomeMessage.append("\n§e检测到专业道路模组，已自动启用高级模式！");
-                } else if (!usingAdvanced) {
-                    welcomeMessage.append("\n§7建议在配置中启用高级模式以获得更好的道路识别");
-                }
-            } else {
-                welcomeMessage.append("§7未检测到道路模组，使用基础道路检测");
-            }
-            serverPlayer.sendSystemMessage(Component.literal(welcomeMessage.toString()));
-            QianmoSpeedMod.LOGGER.info("玩家 {} 登录，已发送欢迎消息", player.getName().getString());
-        }
-    }
-
-    /**
-     * 玩家登出时清理数据
-     */
-    @SubscribeEvent
-    public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
-        cleanupPlayerData(event.getEntity());
-        // 清理 RoadWeaver 缓存
-        if (QianmoSpeedMod.isRoadModLoaded("roadweaver")) {
-            AdvancedRoadHandler.clearCache();
-        }
-    }
-
-    /**
-     *玩家每tick更新时检查 - 防止卡顿
-     */
-    @SubscribeEvent
-    public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
-        if (event.phase != TickEvent.Phase.END)
-            return;
-        if (event.player.level().isClientSide())
-            return;
-        Player player = event.player;
-        // 检查间隔控制
-        int currentTick = (int) player.level().getGameTime();
-        Integer lastCheck = lastCheckTicks.get(player.getUUID());
-        int checkInterval = SpeedModConfig.getCheckInterval();
-        if (lastCheck != null && currentTick - lastCheck < checkInterval) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("跳过检查间隔: 玩家={}, 上次={}, 当前={}, 间隔={}",
-                        player.getName().getString(), lastCheck, currentTick, checkInterval);
-            }
-            return;
-        }
-        // 更新最后检查时间
-        lastCheckTicks.put(player.getUUID(), currentTick);
-        if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("开始检查玩家 {} (tick={})", player.getName().getString(), currentTick);
-        }
-        // 检查玩家是否穿着有旅途祝福附魔的靴子
-        ItemStack boots = player.getInventory().getArmor(0); // 0是靴子槽位
-        if (!boots.isEmpty()) {
-            Map<Enchantment, Integer> enchantments = EnchantmentHelper.getEnchantments(boots);
-            // 使用安全的方式获取旅途祝福附魔
-            Enchantment travelBlessingsEnchantment = null;
-            try {
-                travelBlessingsEnchantment = ForgeRegistries.ENCHANTMENTS.getValue(
-                        new net.minecraft.resources.ResourceLocation(QianmoSpeedMod.MODID, "travel_blessings"));
-            } catch (Exception e) {
-                QianmoSpeedMod.LOGGER.error("获取旅途祝福附魔失败: ", e);
-            }
-            if (travelBlessingsEnchantment != null && enchantments.containsKey(travelBlessingsEnchantment)) {
-                int enchantLevel = enchantments.get(travelBlessingsEnchantment);
-                if (SpeedModConfig.isDebugMessagesEnabled()) {
-                    QianmoSpeedMod.LOGGER.debug("玩家 {} 有旅途祝福附魔，等级: {}",
-                            player.getName().getString(), enchantLevel);
-                }
-                // 创建检测器
-                RoadDetectionFactory.IRoadDetector detector = RoadDetectionFactory.createDetector();
-                // 🔍 添加检测器类型日志（每200 tick输出一次，避免刷屏）
-                if (SpeedModConfig.isDebugMessagesEnabled() && player.level().getGameTime() % 200 == 0) {
-                    QianmoSpeedMod.LOGGER.debug("================== 当前使用的检测器 ==================");
-                    QianmoSpeedMod.LOGGER.debug("玩家: {}", player.getName().getString());
-                    QianmoSpeedMod.LOGGER.debug("检测器类型: {}", detector.getClass().getSimpleName());
-                    QianmoSpeedMod.LOGGER.debug("高级功能启用: {}", SpeedModConfig.isAdvancedFeaturesEnabled());
-                    QianmoSpeedMod.LOGGER.debug("检测模式: {}", SpeedModConfig.getRoadDetectionMode());
-                    QianmoSpeedMod.LOGGER.debug("===================================================");
-                }
-                // 使用多层检测方法
-                boolean isOnRoad = checkRoadWithMultiLayer(player.level(), player, detector);
-                // 腾空状态处理
-                BlockPos belowPlayer = player.blockPosition().below();
-                updateAirborneState(player, isOnRoad, enchantLevel, belowPlayer);
-                //修改：检查是否应该维持速度加成（腾空时）
-                boolean maintainBonus = false;
-                int newLevel;
-                if (isOnRoad) {
-                    // 正常在道路上
-                    newLevel = enchantLevel;
-                } else {
-                    // 不在道路上，检查是否腾空且应该维持
-                    if (shouldMaintainSpeedBonus(player, detector)) {
-                        maintainBonus = true;
-                        //使用腾空状态记录的等级
-                        AirborneState state = playerAirborneStates.get(player.getUUID());
-                        newLevel = state != null ? state.roadLevel : enchantLevel;
-                        if (SpeedModConfig.isDebugMessagesEnabled()) {
-                            QianmoSpeedMod.LOGGER.debug("玩家 {} 腾空中，维持速度加成（等级={}）",
-                                    player.getName().getString(), newLevel);
-                        }
-                    } else {
-                        newLevel = 0;
-                    }
-                }
-                if (SpeedModConfig.isDebugMessagesEnabled()) {
-                    BlockState feetState = player.level().getBlockState(belowPlayer);
-                    QianmoSpeedMod.LOGGER.debug("玩家 {} 最终检测结果: 道路={}, 腾空维持={}, 速度等级={}, 脚下方块={}",
-                            player.getName().getString(), isOnRoad, maintainBonus, newLevel,
-                            ForgeRegistries.BLOCKS.getKey(feetState.getBlock()));
-                }
-                // 获取之前的速度级别
-                Integer previousLevel = playerSpeedLevels.get(player.getUUID());
-                Integer stableLevel = playerStableSpeedLevels.get(player.getUUID());
-                //防抖动逻辑 - 速度等级需要稳定2次检查才更新
-                if (stableLevel == null || stableLevel != newLevel) {
-                    // 第一次检测到变化，记录但不立即应用
-                    playerStableSpeedLevels.put(player.getUUID(), newLevel);
-                    if (SpeedModConfig.isDebugMessagesEnabled()) {
-                        QianmoSpeedMod.LOGGER.debug("玩家 {} 速度等级变化（待确认）: {} -> {}",
-                                player.getName().getString(), stableLevel, newLevel);
-                    }
-                } else {
-                    // 速度等级已经稳定，检查是否需要更新效果
-                    if (previousLevel == null || previousLevel != newLevel) {
-                        if (SpeedModConfig.isDebugMessagesEnabled()) {
-                            QianmoSpeedMod.LOGGER.debug("玩家 {} 速度状态确认变化: 之前={}, 现在={}",
-                                    player.getName().getString(), previousLevel, newLevel);
-                        }
-                        handleSpeedEffect(player, previousLevel, newLevel);
-                    }
-                    // 更新当前速度级别
-                    playerSpeedLevels.put(player.getUUID(), newLevel);
-                }
-            } else {
-                // 如果没有旅途祝福附魔，清理速度效果
-                Integer previousLevel = playerSpeedLevels.get(player.getUUID());
-                if (previousLevel != null && previousLevel > 0) {
-                    if (SpeedModConfig.isDebugMessagesEnabled()) {
-                        QianmoSpeedMod.LOGGER.debug("玩家 {} 移除附魔，清理速度效果", player.getName().getString());
-                    }
-                    removeSpeedEffect(player, previousLevel);
-                    playerSpeedLevels.put(player.getUUID(), 0);
-                    playerStableSpeedLevels.put(player.getUUID(), 0); //同时清理稳定等级
-                }
-                // 清理腾空状态
-                playerAirborneStates.remove(player.getUUID());
-            }
-        } else {
-            // 如果没有穿靴子，清理速度效果
-            Integer previousLevel = playerSpeedLevels.get(player.getUUID());
-            if (previousLevel != null && previousLevel > 0) {
-                if (SpeedModConfig.isDebugMessagesEnabled()) {
-                    QianmoSpeedMod.LOGGER.debug("玩家 {} 没穿靴子，清理速度效果", player.getName().getString());
-                }
-                removeSpeedEffect(player, previousLevel);
-                playerSpeedLevels.put(player.getUUID(), 0);
-                playerStableSpeedLevels.put(player.getUUID(), 0); //同时清理稳定等级
-            }
-            // 清理腾空状态
-            playerAirborneStates.remove(player.getUUID());
-        }
-        // 调试信息 - 定期记录速度属性状态
-        if (SpeedModConfig.isDebugMessagesEnabled() && player.level().getGameTime() % 200 == 0) {
-            AttributeInstance movementSpeed = player.getAttribute(Attributes.MOVEMENT_SPEED);
-            if (movementSpeed != null) {
-                double baseSpeed = movementSpeed.getBaseValue();
-                double currentSpeed = movementSpeed.getValue();
-                boolean hasModifier = hasAttributeModifier(movementSpeed, TRAVEL_BLESSINGS_MODIFIER_UUID);
-                QianmoSpeedMod.LOGGER.debug("玩家 {} 速度状态: 基础={:.4f}, 当前={:.4f}, 有修饰器={}",
-                        player.getName().getString(), baseSpeed, currentSpeed, hasModifier);
-            }
-        }
-    }
-
-    /**
-     * 处理速度效果应用/移除
-     */
-    private static void handleSpeedEffect(Player player, Integer previousLevel, int newLevel) {
-        // 移除旧的速度效果
-        if (previousLevel != null && previousLevel > 0) {
-            removeSpeedEffect(player, previousLevel);
-            if (SpeedModConfig.isSpeedEffectMessagesEnabled() && player instanceof ServerPlayer) {
-                ServerPlayer serverPlayer = (ServerPlayer) player;
-                String removeMessage = "§7[阡陌疾旅] §f道路速度加成已移除";
-                serverPlayer.sendSystemMessage(Component.literal(removeMessage));
-                QianmoSpeedMod.LOGGER.debug("移除玩家 {} 的速度效果，之前等级: {}",
-                        player.getName().getString(), previousLevel);
-            }
-        }
-        // 应用新的速度效果
-        if (newLevel > 0) {
-            applySpeedEffect(player, newLevel);
-            if (SpeedModConfig.isSpeedEffectMessagesEnabled() && player instanceof ServerPlayer) {
-                ServerPlayer serverPlayer = (ServerPlayer) player;
-                String romanNumeral;
-                switch (newLevel) {
-                    case 1 -> romanNumeral = "I";
-                    case 2 -> romanNumeral = "II";
-                    case 3 -> romanNumeral = "III";
-                    default -> romanNumeral = String.valueOf(newLevel);
-                }
-                String appliedMessage = "§a[阡陌疾旅] §f道路速度加成已激活 (§e" + romanNumeral + "级§f)";
-                serverPlayer.sendSystemMessage(Component.literal(appliedMessage));
-                QianmoSpeedMod.LOGGER.debug("应用玩家 {} 的速度效果，新等级: {}",
-                        player.getName().getString(), newLevel);
-            }
-        }
-    }
-
-    /**
-     * 应用速度效果 - 使用属性修饰器
-     */
-    private static void applySpeedEffect(Player player, int level) {
-        double multiplier = SpeedModConfig.getSpeedMultiplier(level);
-        double speedBonus = multiplier - 1.0;
-        // 获取移动速度属性
-        AttributeInstance movementSpeed = player.getAttribute(Attributes.MOVEMENT_SPEED);
-        if (movementSpeed == null) {
-            QianmoSpeedMod.LOGGER.error("玩家 {} 没有移动速度属性!", player.getName().getString());
-            return;
-        }
-        // 创建属性修饰器
-        AttributeModifier speedModifier = new AttributeModifier(
-                TRAVEL_BLESSINGS_MODIFIER_UUID,
-                "TravelBlessingsSpeedBonus",
-                speedBonus,
-                AttributeModifier.Operation.MULTIPLY_TOTAL);
-        // 先移除可能存在的旧修饰器
-        if (hasAttributeModifier(movementSpeed, TRAVEL_BLESSINGS_MODIFIER_UUID)) {
-            removeAttributeModifier(movementSpeed, TRAVEL_BLESSINGS_MODIFIER_UUID);
-        }
-        // 添加新的修饰器
-        movementSpeed.addTransientModifier(speedModifier);
-        if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("应用速度修饰器: 玩家={}, 等级={}, 加成={:.2f}",
-                    player.getName().getString(), level, speedBonus);
-        }
-    }
-
-    /**
-     * 移除属性修饰器
-     */
     private static void removeAttributeModifier(AttributeInstance attribute, UUID modifierId) {
         if (attribute == null)
             return;
-        Collection<AttributeModifier> modifiers = attribute.getModifiers();
         AttributeModifier toRemove = null;
-        for (AttributeModifier modifier : modifiers) {
+        for (AttributeModifier modifier : attribute.getModifiers()) {
             if (modifier.getId().equals(modifierId)) {
                 toRemove = modifier;
                 break;
@@ -579,41 +245,437 @@ public class BasicEventHandler {
         }
         if (toRemove != null) {
             attribute.removeModifier(toRemove);
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("移除属性修饰器: ID={}", modifierId);
+        }
+    }
+
+    // ========== 常驻加速核心方法 ==========
+    private static void applyPermanentSpeedEffect(Player player) {
+        double multiplier = SpeedModConfig.getPermanentSpeedMultiplier();
+        double speedBonus = multiplier - 1.0;
+
+        AttributeInstance movementSpeed = player.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (movementSpeed == null)
+            return;
+
+        QianmoSpeedMod.LOGGER.info("★★★★★ 【常驻加速】应用！玩家={}, 倍率={}, 加成={}%",
+                player.getName().getString(), multiplier, (int) (speedBonus * 100));
+
+        AttributeModifier speedModifier = new AttributeModifier(
+                PERMANENT_SPEED_MODIFIER_UUID,
+                "PermanentRoadSpeedBonus",
+                speedBonus,
+                AttributeModifier.Operation.MULTIPLY_TOTAL);
+
+        if (hasAttributeModifier(movementSpeed, PERMANENT_SPEED_MODIFIER_UUID)) {
+            removeAttributeModifier(movementSpeed, PERMANENT_SPEED_MODIFIER_UUID);
+        }
+
+        movementSpeed.addTransientModifier(speedModifier);
+        playerPermanentSpeedActive.put(player.getUUID(), true);
+    }
+
+    private static void removePermanentSpeedEffect(Player player) {
+        AttributeInstance movementSpeed = player.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (movementSpeed == null)
+            return;
+
+        if (hasAttributeModifier(movementSpeed, PERMANENT_SPEED_MODIFIER_UUID)) {
+            removeAttributeModifier(movementSpeed, PERMANENT_SPEED_MODIFIER_UUID);
+            QianmoSpeedMod.LOGGER.info("【移除常驻】玩家={} 的常驻道路加速已移除", player.getName().getString());
+        }
+    }
+
+    // ========== 常驻加速主逻辑（使用统一腾空判断）==========
+    private static void handlePermanentRoadSpeed(Player player, int currentTick) {
+        UUID playerId = player.getUUID();
+
+        // ========== 第一道防线：附魔检测 ==========
+        boolean hasActiveEnchantment = playerSpeedLevels.getOrDefault(playerId, 0) > 0;
+        if (hasActiveEnchantment) {
+            if (playerPermanentSpeedActive.getOrDefault(playerId, false)) {
+                removePermanentSpeedEffect(player);
+                playerPermanentSpeedActive.put(playerId, false);
+                QianmoSpeedMod.LOGGER.debug("【常驻】附魔激活，强制移除常驻加速: 玩家={}", player.getName().getString());
+            }
+            return;
+        }
+
+        // 1. 配置检查
+        if (!SpeedModConfig.isPermanentSpeedEnabled()) {
+            if (playerPermanentSpeedActive.getOrDefault(playerId, false)) {
+                removePermanentSpeedEffect(player);
+                playerPermanentSpeedActive.put(playerId, false);
+            }
+            return;
+        }
+
+        // 2. 间隔控制
+        Integer lastCheck = lastPermanentCheckTicks.get(playerId);
+        int checkInterval = SpeedModConfig.getCheckInterval();
+        if (lastCheck != null && currentTick - lastCheck < checkInterval) {
+            return;
+        }
+        lastPermanentCheckTicks.put(playerId, currentTick);
+
+        // 3. 统一道路检测
+        RoadDetectionFactory.IRoadDetector detector = RoadDetectionFactory.createDetector();
+        boolean isOnRoad = checkRoadWithMultiLayer(player.level(), player, detector);
+
+        // 4. 更新腾空状态
+        BlockPos belowPlayer = player.blockPosition().below();
+        updateAirborneState(player, isOnRoad, 1, belowPlayer);
+
+        // 5. 使用统一腾空维持检查
+        boolean shouldMaintain = false;
+        if (!isOnRoad) {
+            shouldMaintain = shouldMaintainSpeedBonus(player, detector);
+            if (shouldMaintain && SpeedModConfig.isDebugMessagesEnabled()) {
+                QianmoSpeedMod.LOGGER.debug("玩家 {} 腾空中，维持常驻加速", player.getName().getString());
+            }
+        }
+
+        // 6. 应用/移除效果
+        boolean currentlyActive = playerPermanentSpeedActive.getOrDefault(playerId, false);
+        double multiplier = SpeedModConfig.getPermanentSpeedMultiplier();
+
+        if (isOnRoad || shouldMaintain) {
+            if (!currentlyActive) {
+                applyPermanentSpeedEffect(player);
+                playerPermanentSpeedActive.put(playerId, true);
+
+                if (SpeedModConfig.isSpeedEffectMessagesEnabled()) {
+                    int percent = (int) Math.round((multiplier - 1.0) * 100);
+                    player.sendSystemMessage(Component.literal(
+                            "§a[阡陌疾旅] §f常驻道路加速已激活 (§e" + percent + "%§f)"));
+                }
+            }
+        } else {
+            if (currentlyActive) {
+                removePermanentSpeedEffect(player);
+                playerPermanentSpeedActive.put(playerId, false);
+
+                if (SpeedModConfig.isSpeedEffectMessagesEnabled()) {
+                    player.sendSystemMessage(Component.literal(
+                            "§7[阡陌疾旅] §f常驻道路加速已移除"));
+                }
             }
         }
     }
 
-    /**
-     * 移除速度效果 - 移除属性修饰器
-     */
-    private static void removeSpeedEffect(Player player, int level) {
-        removeSpeedAttribute(player);
+    // ========== 附魔加速核心方法 ==========
+    private static void applySpeedEffect(Player player, int level) {
+        double multiplier = SpeedModConfig.getSpeedMultiplier(level);
+        double speedBonus = multiplier - 1.0;
+
+        AttributeInstance movementSpeed = player.getAttribute(Attributes.MOVEMENT_SPEED);
+        if (movementSpeed == null)
+            return;
+
+        // 附魔生效时，强制移除常驻加速
+        UUID playerId = player.getUUID();
+        if (playerPermanentSpeedActive.getOrDefault(playerId, false)) {
+            removePermanentSpeedEffect(player);
+            playerPermanentSpeedActive.put(playerId, false);
+            QianmoSpeedMod.LOGGER.debug("附魔生效，移除常驻加速: 玩家={}", player.getName().getString());
+        }
+
+        AttributeModifier speedModifier = new AttributeModifier(
+                TRAVEL_BLESSINGS_MODIFIER_UUID,
+                "TravelBlessingsSpeedBonus",
+                speedBonus,
+                AttributeModifier.Operation.MULTIPLY_TOTAL);
+
+        if (hasAttributeModifier(movementSpeed, TRAVEL_BLESSINGS_MODIFIER_UUID)) {
+            removeAttributeModifier(movementSpeed, TRAVEL_BLESSINGS_MODIFIER_UUID);
+        }
+
+        movementSpeed.addTransientModifier(speedModifier);
+
         if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("移除速度效果: 玩家={}, 等级={}",
-                    player.getName().getString(), level);
+            QianmoSpeedMod.LOGGER.debug("应用附魔速度: 玩家={}, 等级={}, 加成={}%",
+                    player.getName().getString(), level, (int) (speedBonus * 100));
         }
     }
 
-    /**
-     * 移除速度属性修饰器
-     */
     private static void removeSpeedAttribute(Player player) {
         AttributeInstance movementSpeed = player.getAttribute(Attributes.MOVEMENT_SPEED);
         if (movementSpeed == null)
             return;
         if (hasAttributeModifier(movementSpeed, TRAVEL_BLESSINGS_MODIFIER_UUID)) {
             removeAttributeModifier(movementSpeed, TRAVEL_BLESSINGS_MODIFIER_UUID);
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("移除速度修饰器: 玩家={}", player.getName().getString());
+            QianmoSpeedMod.LOGGER.info("【移除附魔】玩家={} 的旅途祝福效果已移除", player.getName().getString());
+        }
+    }
+
+    private static void removeSpeedEffect(Player player, int level) {
+        removeSpeedAttribute(player);
+    }
+
+    private static void handleSpeedEffect(Player player, Integer previousLevel, int newLevel) {
+        if (previousLevel != null && previousLevel > 0) {
+            removeSpeedEffect(player, previousLevel);
+            if (SpeedModConfig.isSpeedEffectMessagesEnabled() && player instanceof ServerPlayer) {
+                player.sendSystemMessage(Component.literal("§7[阡陌疾旅] §f道路速度加成已移除"));
+            }
+        }
+
+        if (newLevel > 0) {
+            applySpeedEffect(player, newLevel);
+            if (SpeedModConfig.isSpeedEffectMessagesEnabled() && player instanceof ServerPlayer) {
+                String romanNumeral = switch (newLevel) {
+                    case 1 -> "I";
+                    case 2 -> "II";
+                    case 3 -> "III";
+                    default -> String.valueOf(newLevel);
+                };
+                player.sendSystemMessage(Component.literal(
+                        "§a[阡陌疾旅] §f道路速度加成已激活 (§e" + romanNumeral + "级§f)"));
             }
         }
     }
 
-    /**
-     * 玩家重生时重置数据
-     */
+    // ========== 附魔加速主逻辑（使用统一腾空判断）==========
+    private static boolean checkAndHandleEnchantmentSpeed(Player player, int currentTick) {
+        UUID playerId = player.getUUID();
+
+        Integer lastCheck = lastEnchantmentCheckTicks.get(playerId);
+        int checkInterval = SpeedModConfig.getCheckInterval();
+        if (lastCheck != null && currentTick - lastCheck < checkInterval) {
+            return playerSpeedLevels.getOrDefault(playerId, 0) > 0;
+        }
+        lastEnchantmentCheckTicks.put(playerId, currentTick);
+
+        ItemStack boots = player.getInventory().getArmor(0);
+        if (!boots.isEmpty()) {
+            Map<Enchantment, Integer> enchantments = EnchantmentHelper.getEnchantments(boots);
+            Enchantment travelBlessingsEnchantment = ForgeRegistries.ENCHANTMENTS.getValue(
+                    new net.minecraft.resources.ResourceLocation(QianmoSpeedMod.MODID, "travel_blessings"));
+
+            if (travelBlessingsEnchantment != null && enchantments.containsKey(travelBlessingsEnchantment)) {
+                int enchantLevel = enchantments.get(travelBlessingsEnchantment);
+
+                RoadDetectionFactory.IRoadDetector detector = RoadDetectionFactory.createDetector();
+                boolean isOnRoad = checkRoadWithMultiLayer(player.level(), player, detector);
+
+                BlockPos belowPlayer = player.blockPosition().below();
+                updateAirborneState(player, isOnRoad, enchantLevel, belowPlayer);
+
+                int newLevel;
+                if (isOnRoad) {
+                    newLevel = enchantLevel;
+                } else {
+                    // 使用统一腾空维持检查
+                    if (shouldMaintainSpeedBonus(player, detector)) {
+                        AirborneState state = playerAirborneStates.get(playerId);
+                        newLevel = state != null ? state.roadLevel : enchantLevel;
+                    } else {
+                        newLevel = 0;
+                    }
+                }
+
+                Integer previousLevel = playerSpeedLevels.get(playerId);
+                Integer stableLevel = playerStableSpeedLevels.get(playerId);
+
+                if (stableLevel == null || stableLevel != newLevel) {
+                    playerStableSpeedLevels.put(playerId, newLevel);
+                } else {
+                    if (previousLevel == null || previousLevel != newLevel) {
+                        handleSpeedEffect(player, previousLevel, newLevel);
+                    }
+                    playerSpeedLevels.put(playerId, newLevel);
+                }
+
+                return newLevel > 0;
+            }
+        }
+
+        // 没有附魔，清理效果
+        Integer previousLevel = playerSpeedLevels.get(playerId);
+        if (previousLevel != null && previousLevel > 0) {
+            removeSpeedEffect(player, previousLevel);
+            playerSpeedLevels.put(playerId, 0);
+            playerStableSpeedLevels.put(playerId, 0);
+        }
+        playerAirborneStates.remove(playerId);
+
+        return false;
+    }
+
+    // ========== 立即激活附魔的方法 ==========
+    private static void handleEnchantmentSpeedImmediate(Player player, int currentTick, int enchantLevel,
+            boolean isOnRoad) {
+        UUID playerId = player.getUUID();
+
+        // 更新腾空状态
+        BlockPos belowPlayer = player.blockPosition().below();
+        updateAirborneState(player, isOnRoad, enchantLevel, belowPlayer);
+
+        // 已知在道路上，直接激活附魔
+        int newLevel = enchantLevel;
+
+        Integer previousLevel = playerSpeedLevels.get(playerId);
+        Integer stableLevel = playerStableSpeedLevels.get(playerId);
+
+        if (stableLevel == null || stableLevel != newLevel) {
+            playerStableSpeedLevels.put(playerId, newLevel);
+        } else {
+            if (previousLevel == null || previousLevel != newLevel) {
+                handleSpeedEffect(player, previousLevel, newLevel);
+            }
+            playerSpeedLevels.put(playerId, newLevel);
+        }
+
+        if (SpeedModConfig.isDebugMessagesEnabled()) {
+            QianmoSpeedMod.LOGGER.debug("【附魔立即激活】玩家={}, 等级={}",
+                    player.getName().getString(), enchantLevel);
+        }
+    }
+
+    // ========== 事件监听 ==========
+
+    @SubscribeEvent
+    public static void onPlayerTick(TickEvent.PlayerTickEvent event) {
+        if (event.phase != TickEvent.Phase.END)
+            return;
+        if (event.player.level().isClientSide())
+            return;
+
+        Player player = event.player;
+        int currentTick = (int) player.level().getGameTime();
+        UUID playerId = player.getUUID();
+
+        // ========== 先检测道路，再决定哪个加速生效 ==========
+
+        // 1. 先检测是否在道路上
+        RoadDetectionFactory.IRoadDetector detector = RoadDetectionFactory.createDetector();
+        boolean isOnRoad = checkRoadWithMultiLayer(player.level(), player, detector);
+
+        // 2. 检查玩家是否穿着附魔靴子
+        boolean hasEnchantmentBoots = false;
+        int enchantmentLevel = 0;
+        ItemStack boots = player.getInventory().getArmor(0);
+        if (!boots.isEmpty()) {
+            Map<Enchantment, Integer> enchantments = EnchantmentHelper.getEnchantments(boots);
+            Enchantment travelBlessingsEnchantment = ForgeRegistries.ENCHANTMENTS.getValue(
+                    new net.minecraft.resources.ResourceLocation(QianmoSpeedMod.MODID, "travel_blessings"));
+            if (travelBlessingsEnchantment != null && enchantments.containsKey(travelBlessingsEnchantment)) {
+                hasEnchantmentBoots = true;
+                enchantmentLevel = enchantments.get(travelBlessingsEnchantment);
+            }
+        }
+
+        // 3. 处理附魔加速（如果穿着附魔靴子且在道路上）
+        if (hasEnchantmentBoots && isOnRoad) {
+            // 附魔应该立即激活，强制移除常驻加速
+            if (playerPermanentSpeedActive.getOrDefault(playerId, false)) {
+                removePermanentSpeedEffect(player);
+                playerPermanentSpeedActive.put(playerId, false);
+                QianmoSpeedMod.LOGGER.debug("【附魔优先】道路上检测到附魔靴子，移除常驻加速");
+            }
+
+            // 调用新方法，直接应用附魔加速
+            handleEnchantmentSpeedImmediate(player, currentTick, enchantmentLevel, isOnRoad);
+        } else {
+            // 4. 没有附魔或不在道路上，正常处理附魔（可能维持或移除）
+            boolean hasEnchantment = checkAndHandleEnchantmentSpeed(player, currentTick);
+
+            // 5. 只有完全没有附魔时，才处理常驻加速
+            if (!hasEnchantment) {
+                handlePermanentRoadSpeed(player, currentTick);
+            } else {
+                // 附魔激活时，强制移除常驻加速
+                if (playerPermanentSpeedActive.getOrDefault(playerId, false)) {
+                    removePermanentSpeedEffect(player);
+                    playerPermanentSpeedActive.put(playerId, false);
+                    QianmoSpeedMod.LOGGER.debug("【附魔优先】强制移除常驻加速: 玩家={}", player.getName().getString());
+                }
+            }
+        }
+
+        // 调试日志（每200 tick）
+        if (SpeedModConfig.isDebugMessagesEnabled() && currentTick % 200 == 0) {
+            QianmoSpeedMod.LOGGER.info("【状态】玩家={}, 附魔激活={}, 常驻激活={}",
+                    player.getName().getString(),
+                    playerSpeedLevels.getOrDefault(playerId, 0) > 0,
+                    playerPermanentSpeedActive.getOrDefault(playerId, false));
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLogin(PlayerEvent.PlayerLoggedInEvent event) {
+        cleanupPlayerData(event.getEntity());
+
+        Player player = event.getEntity();
+        if (player instanceof ServerPlayer && SpeedModConfig.isLoginMessagesEnabled()) {
+            ServerPlayer serverPlayer = (ServerPlayer) player;
+            StringBuilder welcomeMessage = new StringBuilder();
+
+            // 模组前缀
+            String prefix = LocalizationHelper.getLocalized("qianmospeed.message.login.prefix");
+            welcomeMessage.append(prefix);
+
+            boolean usingAdvanced = false;
+            try {
+                RoadDetectionFactory.IRoadDetector detector = RoadDetectionFactory.createDetector();
+                usingAdvanced = detector instanceof com.example.qianmospeed.road.HybridRoadDetector;
+            } catch (Exception e) {
+                usingAdvanced = SpeedModConfig.isAdvancedFeaturesEnabled() ||
+                        QianmoSpeedMod.hasDetectedProfessionalRoadMods();
+            }
+
+            // 模式消息
+            if (usingAdvanced) {
+                String advancedMsg = LocalizationHelper.getLocalized(
+                        "qianmospeed.message.login.advanced");
+                welcomeMessage.append(advancedMsg);
+
+                if (AdvancedRoadHandler.isAvailable()) {
+                    welcomeMessage.append(" (规划数据优化)");
+                }
+            } else {
+                String basicMsg = LocalizationHelper.getLocalized(
+                        "qianmospeed.message.login.basic",
+                        SpeedModConfig.getCheckInterval());
+                welcomeMessage.append(basicMsg);
+            }
+
+            // 常驻加速提示
+            if (SpeedModConfig.isPermanentSpeedEnabled()) {
+                int percent = (int) Math.round((SpeedModConfig.getPermanentSpeedMultiplier() - 1.0) * 100);
+                String permanentSpeedMsg = LocalizationHelper.getLocalized(
+                        "qianmospeed.message.login.permanent_speed",
+                        percent);
+                String priorityMsg = LocalizationHelper.getLocalized(
+                        "qianmospeed.message.login.permanent_speed_priority");
+                welcomeMessage.append("\n").append(permanentSpeedMsg).append(priorityMsg);
+            }
+
+            // 检测到的模组
+            if (QianmoSpeedMod.hasDetectedRoadMods()) {
+                var modNames = QianmoSpeedMod.getDetectedRoadModNames();
+                String detectedModsMsg = LocalizationHelper.getLocalized("qianmospeed.message.login.detected_mods");
+                welcomeMessage.append("\n").append(detectedModsMsg);
+
+                for (int i = 0; i < modNames.size(); i++) {
+                    if (i > 0)
+                        welcomeMessage.append(", ");
+                    welcomeMessage.append(modNames.get(i));
+                }
+            }
+
+            serverPlayer.sendSystemMessage(Component.literal(welcomeMessage.toString()));
+        }
+    }
+
+    @SubscribeEvent
+    public static void onPlayerLogout(PlayerEvent.PlayerLoggedOutEvent event) {
+        cleanupPlayerData(event.getEntity());
+        if (SpeedModConfig.isRoadWeaverIntegrationEnabled() && QianmoSpeedMod.isRoadModLoaded("roadweaver")) {
+            AdvancedRoadHandler.clearCache(null);
+            RoadWeaverH2Helper.clearAllCache();
+        }
+    }
+
     @SubscribeEvent
     public static void onPlayerRespawn(PlayerEvent.PlayerRespawnEvent event) {
         cleanupPlayerData(event.getEntity());
@@ -622,40 +684,38 @@ public class BasicEventHandler {
         }
     }
 
-    /**
-     * 玩家切换维度时重置数据
-     */
     @SubscribeEvent
     public static void onPlayerChangeDimension(PlayerEvent.PlayerChangedDimensionEvent event) {
         cleanupPlayerData(event.getEntity());
-        // 清理 RoadWeaver 缓存
-        if (QianmoSpeedMod.isRoadModLoaded("roadweaver")) {
-            AdvancedRoadHandler.clearCache();
-        }
-        if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("玩家切换维度: {}", event.getEntity().getName().getString());
-        }
-    }
-
-    /**
-     * 玩家穿戴装备事件 - 确保装备变化时正确更新
-     */
-    @SubscribeEvent
-    public static void onEquipmentChange(LivingEquipmentChangeEvent event) {
-        if (event.getEntity() instanceof Player) {
-            Player player = (Player) event.getEntity();
-            if (event.getSlot() == EquipmentSlot.FEET) {
-                cleanupPlayerData(player);
-                if (SpeedModConfig.isDebugMessagesEnabled()) {
-                    QianmoSpeedMod.LOGGER.debug("玩家装备变化: {} 更换了靴子", player.getName().getString());
-                }
+        if (SpeedModConfig.isRoadWeaverIntegrationEnabled() && QianmoSpeedMod.isRoadModLoaded("roadweaver")) {
+            if (event.getEntity().level() instanceof ServerLevel serverLevel) {
+                AdvancedRoadHandler.clearCache(serverLevel);
+                RoadWeaverH2Helper.clearCache(serverLevel.dimension().location().toString());
             }
         }
     }
 
-    /**
-     * 玩家死亡事件，确保数据清理
-     */
+    @SubscribeEvent
+    public static void onEquipmentChange(LivingEquipmentChangeEvent event) {
+        if (event.getEntity() instanceof Player player && event.getSlot() == EquipmentSlot.FEET) {
+            QianmoSpeedMod.LOGGER.info("【装备变化】{} 更换了靴子，强制移除所有速度效果", player.getName().getString());
+
+            UUID playerId = player.getUUID();
+
+            // 1. 必须先移除实际的速度效果！
+            removeSpeedAttribute(player);
+            removePermanentSpeedEffect(player);
+
+            // 2. 再清理内存状态
+            playerSpeedLevels.remove(playerId);
+            playerStableSpeedLevels.remove(playerId);
+            playerPermanentSpeedActive.remove(playerId);
+            lastEnchantmentCheckTicks.remove(playerId);
+            lastPermanentCheckTicks.remove(playerId);
+            playerAirborneStates.remove(playerId);
+        }
+    }
+
     @SubscribeEvent
     public static void onPlayerDeath(PlayerEvent.Clone event) {
         if (event.isWasDeath()) {

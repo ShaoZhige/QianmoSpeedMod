@@ -5,204 +5,115 @@ import com.example.qianmospeed.config.SpeedModConfig;
 import net.minecraft.core.BlockPos;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.state.BlockState;
-import net.minecraftforge.registries.ForgeRegistries;
 
 public class BasicRoadDetector implements RoadDetectionFactory.IRoadDetector {
 
     @Override
     public boolean isOnRoad(Level level, BlockPos pos) {
+        return isOnRoad(level, pos, false);
+    }
+
+    /**
+     * 增强版：支持积极检测模式（仅用于规划中的区块）
+     * 
+     * @param aggressive true: 放宽检测条件（用于规划中的区块）
+     */
+    public boolean isOnRoad(Level level, BlockPos pos, boolean aggressive) {
         // 1. 基础检查：是不是道路方块
         if (!isRoadBlock(level, pos)) {
             return false;
         }
 
-        // 2. 如果启用了方向检测，进行方向检查
-        //修改：移除对不完整方块的跳过逻辑，所有方块都进行方向检测
+        // 2. 方向检测（如果启用）
         if (SpeedModConfig.isDirectionalDetectionEnabled()) {
-            return isDirectionalRoad(level, pos);
+            return isDirectionalRoad(level, pos, aggressive);
         }
-        
-        // 3. 未启用方向检测时直接通过
+
         return true;
     }
 
     /**
-     * 方向检测：严格的双方向检测
-     * 新规则：X和Z方向都必须满足最小长度要求
-     *        即：minLength x minLength 的最小网格才被视为道路
+     * ========== 新方向检测逻辑 ==========
+     * 规则：
+     * 1. 如果两个方向都超过最大值 → false（广场/地板）
+     * 2. 否则，只要有一个方向在最小~最大范围内 → true（道路）
+     * 3. 否则 false
      */
-    private boolean isDirectionalRoad(Level level, BlockPos pos) {
-        // 检查X方向连续长度
+    private boolean isDirectionalRoad(Level level, BlockPos pos, boolean aggressive) {
         int xLength = calculateDirectionalLength(level, pos, true);
-        
-        // 检查Z方向连续长度
         int zLength = calculateDirectionalLength(level, pos, false);
-        
+
         int minLength = SpeedModConfig.getMinDirectionalLength();
         int maxLength = SpeedModConfig.getMaxDirectionalLength();
-        
+
         if (SpeedModConfig.isDebugMessagesEnabled()) {
             QianmoSpeedMod.LOGGER.debug("方向检测 - 位置: {}, X长度: {}, Z长度: {} (要求: 最小{}x{}, 最大{}x{})",
-                pos, xLength, zLength, minLength, minLength, maxLength, maxLength);
+                    pos, xLength, zLength, minLength, minLength, maxLength, maxLength);
         }
-        
-        //新逻辑：两个方向都必须满足最小长度要求
-        boolean xMeetsMin = xLength >= minLength;
-        boolean zMeetsMin = zLength >= minLength;
-        
-        //两个方向都不能超过最大长度（避免地板/广场）
-        boolean xWithinMax = xLength <= maxLength;
-        boolean zWithinMax = zLength <= maxLength;
-        
-        // 情况1：完美道路（两个方向都在有效范围内）
-        if (xMeetsMin && zMeetsMin && xWithinMax && zWithinMax) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("  判定: 完美道路 ({}x{} 在有效范围内)", xLength, zLength);
-            }
-            return true;
-        }
-        
-        // 情况2：一个方向太长（可能是地板/广场）
-        if ((!xWithinMax && zMeetsMin) || (!zWithinMax && xMeetsMin)) {
-            // 一个方向超出最大值，但另一个方向满足最小要求
-            // 可能是窄长的走廊或边界，给予通过
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("  判定: 边界/走廊道路 (一个方向超出但另一个有效)");
-            }
-            return true;
-        }
-        
-        // 情况3：两个方向都超出最大值（绝对是地板/广场）
-        if (!xWithinMax && !zWithinMax) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("  判定: 地板/广场 (两个方向都超出最大值)");
-            }
-            return false;
-        }
-        
-        // 情况4：两个方向都不满足最小要求（太小了）
-        if (!xMeetsMin && !zMeetsMin) {
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("  判定: 装饰/小平台 (两个方向都小于最小值)");
-            }
-            return false;
-        }
-        
-        // 情况5：只有一个方向满足最小要求（如2x1、3x1等）
-        if ((xMeetsMin && !zMeetsMin) || (!xMeetsMin && zMeetsMin)) {
-            // 对于这种线性结构，需要更严格的相邻检查
-            if (checkLinearStructure(level, pos, xLength, zLength)) {
-                if (SpeedModConfig.isDebugMessagesEnabled()) {
-                    QianmoSpeedMod.LOGGER.debug("  判定: 线性结构通过额外检查");
+
+        // ========== 积极模式：放宽检测条件（用于规划中的区块）==========
+        if (aggressive) {
+            int aggressiveMin = Math.max(1, minLength / 2);
+            int aggressiveMax = maxLength * 2;
+
+            boolean xMeetsMin = xLength >= aggressiveMin;
+            boolean zMeetsMin = zLength >= aggressiveMin;
+            boolean xWithinMax = xLength <= aggressiveMax;
+            boolean zWithinMax = zLength <= aggressiveMax;
+
+            // 积极模式下仍然沿用新逻辑：至少一个方向在放宽后的范围内
+            if (xWithinMax && zWithinMax) {
+                // 如果两个方向都未超过放宽的最大值
+                // 只要有一个方向满足最小长度就通过
+                if (xMeetsMin || zMeetsMin) {
+                    if (SpeedModConfig.isDebugMessagesEnabled()) {
+                        QianmoSpeedMod.LOGGER.debug("  积极模式判定: 道路 (X={}, Z={}, 要求: 最小{})",
+                                xLength, zLength, aggressiveMin);
+                    }
+                    return true;
                 }
-                return true;
-            }
-            if (SpeedModConfig.isDebugMessagesEnabled()) {
-                QianmoSpeedMod.LOGGER.debug("  判定: 线性结构未通过检查 (如2x1、3x1等)");
+            } else if (xWithinMax || zWithinMax) {
+                // 只有一个方向在放宽的最大值内，且该方向满足最小长度
+                if ((xWithinMax && xMeetsMin) || (zWithinMax && zMeetsMin)) {
+                    return true;
+                }
             }
             return false;
         }
-        
-        // 默认情况：不通过
+
+        // ========== 标准模式：新逻辑 ==========
+
+        // 规则1：如果两个方向都超过最大值 → 广场/地板
+        if (xLength > maxLength && zLength > maxLength) {
+            if (SpeedModConfig.isDebugMessagesEnabled()) {
+                QianmoSpeedMod.LOGGER.debug("  判定: 广场/地板 (两个方向都超过最大值)");
+            }
+            return false;
+        }
+
+        // 规则2：至少有一个方向在最小~最大范围内 → 道路
+        boolean xValid = xLength >= minLength && xLength <= maxLength;
+        boolean zValid = zLength >= minLength && zLength <= maxLength;
+
+        if (xValid || zValid) {
+            if (SpeedModConfig.isDebugMessagesEnabled()) {
+                QianmoSpeedMod.LOGGER.debug("  判定: 有效道路 (X有效={}, Z有效={})", xValid, zValid);
+            }
+            return true;
+        }
+
+        // 规则3：其他情况（例如两个方向都小于最小值，或一个太小一个太大但都不在范围内）
         if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("  判定: 不符合任何道路特征");
+            QianmoSpeedMod.LOGGER.debug("  判定: 非道路 (X={}, Z={})", xLength, zLength);
         }
         return false;
-    }
-
-    /**
-     * 检查线性结构（如2x1、3x1）是否可以作为道路
-     */
-    private boolean checkLinearStructure(Level level, BlockPos pos, int xLength, int zLength) {
-        // 线性结构需要至少2个相邻道路方块
-        int adjacentRoads = countAdjacentRoadBlocks(level, pos);
-        
-        // 或者形成连续的线性道路
-        boolean isContinuousLine = checkContinuousLine(level, pos, xLength > zLength);
-        
-        return adjacentRoads >= 2 || isContinuousLine;
-    }
-
-    /**
-     * 检查是否形成连续线性的道路
-     */
-    private boolean checkContinuousLine(Level level, BlockPos pos, boolean isXDirection) {
-        int continuousCount = 1;
-        int maxCheck = SpeedModConfig.getMaxDirectionalLength();
-        
-        // 检查正方向
-        BlockPos current = pos;
-        for (int i = 1; i <= maxCheck; i++) {
-            if (isXDirection) {
-                current = current.offset(1, 0, 0);
-            } else {
-                current = current.offset(0, 0, 1);
-            }
-            
-            if (!isRoadBlock(level, current)) {
-                break;
-            }
-            continuousCount++;
-        }
-        
-        // 检查负方向
-        current = pos;
-        for (int i = 1; i <= maxCheck; i++) {
-            if (isXDirection) {
-                current = current.offset(-1, 0, 0);
-            } else {
-                current = current.offset(0, 0, -1);
-            }
-            
-            if (!isRoadBlock(level, current)) {
-                break;
-            }
-            continuousCount++;
-        }
-        
-        // 线性道路需要至少达到最小长度
-        return continuousCount >= SpeedModConfig.getMinDirectionalLength();
-    }
-
-    /**
-     * 统计相邻道路方块数量（8方向）
-     */
-    private int countAdjacentRoadBlocks(Level level, BlockPos pos) {
-        int count = 0;
-        
-        // 四方向相邻
-        BlockPos[] fourDirections = {
-            pos.north(), pos.south(), pos.east(), pos.west()
-        };
-        
-        for (BlockPos adjPos : fourDirections) {
-            if (isRoadBlock(level, adjPos)) {
-                count++;
-            }
-        }
-        
-        // 如果四方向不够，检查对角线
-        if (count < 2) {
-            BlockPos[] diagonalDirections = {
-                pos.north().east(), pos.north().west(),
-                pos.south().east(), pos.south().west()
-            };
-            
-            for (BlockPos adjPos : diagonalDirections) {
-                if (isRoadBlock(level, adjPos)) {
-                    count++;
-                }
-            }
-        }
-        
-        return count;
     }
 
     /**
      * 计算一个方向上的连续道路长度
      */
     private int calculateDirectionalLength(Level level, BlockPos pos, boolean checkX) {
-        int totalLength = 1; // 包括当前位置
+        int totalLength = 1;
 
         // 检查正方向
         int positiveLength = checkDirection(level, pos, checkX, true);
@@ -221,19 +132,22 @@ public class BasicRoadDetector implements RoadDetectionFactory.IRoadDetector {
     private int checkDirection(Level level, BlockPos startPos, boolean checkX, boolean positive) {
         int length = 0;
         int direction = positive ? 1 : -1;
-        int maxCheck = SpeedModConfig.getMaxDirectionalLength() * 3; // 扩大搜索范围
+        int maxCheck = SpeedModConfig.getMaxDirectionalLength() * 3;
 
         BlockPos currentPos = startPos;
 
         for (int i = 1; i <= maxCheck; i++) {
-            // 移动到下一个位置
             if (checkX) {
                 currentPos = currentPos.offset(direction, 0, 0);
             } else {
                 currentPos = currentPos.offset(0, 0, direction);
             }
 
-            //修改：只检查是否是道路方块，不检查是否完整
+            // 检查边界，防止越界
+            if (!level.isLoaded(currentPos)) {
+                break;
+            }
+
             if (!isRoadBlock(level, currentPos)) {
                 break;
             }
@@ -250,33 +164,15 @@ public class BasicRoadDetector implements RoadDetectionFactory.IRoadDetector {
     private boolean isRoadBlock(Level level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         net.minecraft.world.level.block.Block block = state.getBlock();
-
-        boolean isRoad = SpeedModConfig.isBasicRoadBlock(block);
-
-        if (SpeedModConfig.isDebugMessagesEnabled() && isRoad) {
-            String blockId = ForgeRegistries.BLOCKS.getKey(block).toString();
-            QianmoSpeedMod.LOGGER.debug("基础检测 - 位置: {}, 方块: {}, 是道路方块",
-                    pos, blockId);
-        }
-
-        return isRoad;
+        return SpeedModConfig.isBasicRoadBlock(block);
     }
 
     /**
-     * 检查是否是基础模式道路方块
+     * 公开方法：检查是否是基础模式道路方块
      */
     public boolean isBasicRoadBlock(Level level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         net.minecraft.world.level.block.Block block = state.getBlock();
         return SpeedModConfig.isBasicRoadBlock(block);
-    }
-
-    /**
-     * 检查是否是高级模式道路方块
-     */
-    public boolean isAdvancedRoadBlock(Level level, BlockPos pos) {
-        BlockState state = level.getBlockState(pos);
-        net.minecraft.world.level.block.Block block = state.getBlock();
-        return SpeedModConfig.isAdvancedRoadBlock(block);
     }
 }

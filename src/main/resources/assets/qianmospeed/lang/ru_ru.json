@@ -1,12 +1,16 @@
 {
-  "enchantment.qianmospeed.travel_blessings": "Благословение Путешественника",
-  "enchantment.qianmospeed.travel_blessings.desc": "Даёт значительное увеличение скорости при ходьбе по дорогам",
+  "enchantment.qianmospeed.travel_blessings": "Благословение путешествий",
+  "enchantment.qianmospeed.travel_blessings.desc": "Даёт значительное ускорение при ходьбе по дорогам",
   
-  "qianmospeed.message.login.basic": "§6[阡陌疾旅] §fИнтеллектуальный базовый режим загружен (интервал: %s тиков)",
-  "qianmospeed.message.login.advanced": "§6[阡陌疾旅] §fПродвинутый режим RoadWeaver включён",
-  
+  "qianmospeed.message.login.basic": "§fИнтеллектуальный базовый режим загружен (интервал: %s тиков)",
+  "qianmospeed.message.login.advanced": "§fRoadWeaver расширенный режим включён",
   "qianmospeed.message.speed.applied": "§a+ Бонус скорости применён (уровень: %s)",
   "qianmospeed.message.speed.removed": "§c- Бонус скорости удалён",
+  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver не обнаружен, используется базовый режим",
   
-  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver не обнаружен, используется базовый режим"
+  "qianmospeed.message.login.permanent_speed": "§7Постоянное ускорение на дорогах включено (§e%s%%§7)",
+  "qianmospeed.message.login.permanent_speed_priority": " §7(Приоритет зачарования)",
+  
+  "qianmospeed.message.login.prefix": "§a[阡陌疾旅] §f",
+  "qianmospeed.message.login.detected_mods": "§7Обнаружены дорожные моды: "
 }

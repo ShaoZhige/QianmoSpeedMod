@@ -61,7 +61,7 @@ public class EnhancedRoadDetectorNoDirection implements RoadDetectionFactory.IRo
 
         boolean result;
         if (isPathBlock) {
-            // 🔧 修复：路径方块需要严格检测
+            // 路径方块需要严格检测
             result = checkPathBlockStrict(level, pos);
             if (SpeedModConfig.isDebugMessagesEnabled()) {
                 QianmoSpeedMod.LOGGER.debug("路径方块检测结果: {}", result);
@@ -95,7 +95,7 @@ public class EnhancedRoadDetectorNoDirection implements RoadDetectionFactory.IRo
     }
 
     /**
-     * 🔧 修复：路径方块严格检测
+     * 路径方块严格检测
      */
     private boolean checkPathBlockStrict(Level level, BlockPos pos) {
         if (SpeedModConfig.isDebugMessagesEnabled()) {
@@ -243,7 +243,7 @@ public class EnhancedRoadDetectorNoDirection implements RoadDetectionFactory.IRo
     }
 
     /**
-     * 🔧 修复：检查标准方块 - 需要相邻方块检查
+     * 检查标准方块 - 需要相邻方块检查
      */
     private boolean checkStandardBlock(Level level, BlockPos pos) {
         // 检查相邻方块（四方向）

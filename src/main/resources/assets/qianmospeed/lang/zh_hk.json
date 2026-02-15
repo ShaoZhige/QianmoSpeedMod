@@ -1,12 +1,16 @@
 {
-  "enchantment.qianmospeed.travel_blessings": "旅行的祝福",
+  "enchantment.qianmospeed.travel_blessings": "旅行嘅祝福",
   "enchantment.qianmospeed.travel_blessings.desc": "喺道路上行走時獲得顯著嘅速度提升",
   
-  "qianmospeed.message.login.basic": "§6[阡陌疾旅] §f智能基礎模式已載入 (間隔: %s ticks)",
-  "qianmospeed.message.login.advanced": "§6[阡陌疾旅] §fRoadWeaver高級模式已啟用",
-  
-  "qianmospeed.message.speed.applied": "§a+ 速度加成已應用 (等級: %s)",
+  "qianmospeed.message.login.basic": "§f智能基礎模式已加載 (間隔: %s ticks)",
+  "qianmospeed.message.login.advanced": "§fRoadWeaver 高級模式已啟用",
+  "qianmospeed.message.speed.applied": "§a+ 速度加成已激活 (等級: %s)",
   "qianmospeed.message.speed.removed": "§c- 速度加成已移除",
+  "qianmospeed.message.roadweaver.not_found": "§e未檢測到 RoadWeaver，使用基礎模式",
   
-  "qianmospeed.message.roadweaver.not_found": "§e未偵測到RoadWeaver，使用基礎模式"
+  "qianmospeed.message.login.permanent_speed": "§7常駐道路加速已啟用 (§e%s%%§7)",
+  "qianmospeed.message.login.permanent_speed_priority": " §7(附魔優先)",
+  
+  "qianmospeed.message.login.prefix": "§a[阡陌疾旅] §f",
+  "qianmospeed.message.login.detected_mods": "§7檢測到道路模組: "
 }

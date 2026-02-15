@@ -1,12 +1,16 @@
 {
-  "enchantment.qianmospeed.travel_blessings": "Bénédiction du Voyageur",
-  "enchantment.qianmospeed.travel_blessings.desc": "Accorde un boost de vitesse significatif en marchant sur les routes",
+  "enchantment.qianmospeed.travel_blessings": "Bénédiction du voyage",
+  "enchantment.qianmospeed.travel_blessings.desc": "Confère un important bonus de vitesse lorsque vous marchez sur les routes",
   
-  "qianmospeed.message.login.basic": "§6[阡陌疾旅] §fMode de base intelligent chargé (intervalle: %s ticks)",
-  "qianmospeed.message.login.advanced": "§6[阡陌疾旅] §fMode avancé RoadWeaver activé",
-  
+  "qianmospeed.message.login.basic": "§fMode de base intelligent chargé (intervalle: %s ticks)",
+  "qianmospeed.message.login.advanced": "§fMode avancé RoadWeaver activé",
   "qianmospeed.message.speed.applied": "§a+ Bonus de vitesse appliqué (niveau: %s)",
   "qianmospeed.message.speed.removed": "§c- Bonus de vitesse retiré",
+  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver non détecté, utilisation du mode de base",
   
-  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver non détecté, utilisation du mode de base"
+  "qianmospeed.message.login.permanent_speed": "§7Accélération permanente sur route activée (§e%s%%§7)",
+  "qianmospeed.message.login.permanent_speed_priority": " §7(Priorité à l'enchantement)",
+  
+  "qianmospeed.message.login.prefix": "§a[阡陌疾旅] §f",
+  "qianmospeed.message.login.detected_mods": "§7Mods de route détectés: "
 }

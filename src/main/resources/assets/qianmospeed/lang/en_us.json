@@ -2,11 +2,15 @@
   "enchantment.qianmospeed.travel_blessings": "Travel Blessings",
   "enchantment.qianmospeed.travel_blessings.desc": "Grants significant speed boost when walking on roads",
   
-  "qianmospeed.message.login.basic": "§6[Qianmo Speed] §fIntelligent basic mode loaded (interval: %s ticks)",
-  "qianmospeed.message.login.advanced": "§6[Qianmo Speed] §fRoadWeaver advanced mode enabled",
-  
+  "qianmospeed.message.login.basic": "§fIntelligent basic mode loaded (interval: %s ticks)",
+  "qianmospeed.message.login.advanced": "§fRoadWeaver advanced mode enabled",
   "qianmospeed.message.speed.applied": "§a+ Speed bonus applied (level: %s)",
   "qianmospeed.message.speed.removed": "§c- Speed bonus removed",
+  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver not detected, using basic mode",
   
-  "qianmospeed.message.roadweaver.not_found": "§eRoadWeaver not detected, using basic mode"
+  "qianmospeed.message.login.permanent_speed": "§7Permanent road speed enabled (§e%s%%§7)",
+  "qianmospeed.message.login.permanent_speed_priority": " §7(Enchantment priority)",
+  
+  "qianmospeed.message.login.prefix": "§a[Qianmo Speed] §f",
+  "qianmospeed.message.login.detected_mods": "§7Detected road mods: "
 }
