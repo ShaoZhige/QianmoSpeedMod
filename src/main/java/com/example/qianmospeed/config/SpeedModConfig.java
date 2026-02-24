@@ -1,5 +1,6 @@
 package com.example.qianmospeed.config;
 
+import com.example.qianmospeed.QianmoSpeedMod;
 import net.minecraftforge.common.ForgeConfigSpec;
 import net.minecraftforge.fml.common.Mod;
 
@@ -370,6 +371,23 @@ public class SpeedModConfig {
         System.out.println("基础道路方块数: " + getBasicRoadBlockIds().size());
         System.out.println("高级道路方块数: " + getAdvancedRoadBlockIds().size());
         System.out.println("======================================");
+    }
+
+    // ========== 📢 配置变更监听 ==========
+
+    /**
+     * 当配置变更时调用，清除检测器缓存
+     */
+    public static void onConfigChanged() {
+        // 清除道路检测器缓存
+        com.example.qianmospeed.road.RoadDetectionFactory.invalidateCache();
+
+        // 重新加载道路方块列表
+        reloadRoadBlocks();
+
+        if (isDebugMessagesEnabled()) {
+            QianmoSpeedMod.LOGGER.info("配置已变更，检测器缓存已清除");
+        }
     }
 
     // ========== 默认方块列表 ==========
