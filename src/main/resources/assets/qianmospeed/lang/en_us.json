@@ -12,5 +12,10 @@
   "qianmospeed.message.login.permanent_speed_priority": " §7(Enchantment priority)",
   
   "qianmospeed.message.login.prefix": "§a[Qianmo Speed] §f",
-  "qianmospeed.message.login.detected_mods": "§7Detected road mods: "
+  "qianmospeed.message.login.detected_mods": "§7Detected road mods: ",
+
+  "advancements.qianmospeed.root.title": "Qianmo Speed",
+  "advancements.qianmospeed.root.description": "Gallop across the roads",
+  "advancements.qianmospeed.first_step.title": "Swift as the Wind",
+  "advancements.qianmospeed.first_step.description": "Take your first step on the journey"
 }

@@ -12,5 +12,10 @@
   "qianmospeed.message.login.permanent_speed_priority": " §7(Приоритет зачарования)",
   
   "qianmospeed.message.login.prefix": "§a[阡陌疾旅] §f",
-  "qianmospeed.message.login.detected_mods": "§7Обнаружены дорожные моды: "
+  "qianmospeed.message.login.detected_mods": "§7Обнаружены дорожные моды: ",
+
+  "advancements.qianmospeed.root.title": "Qianmo Speed",
+  "advancements.qianmospeed.root.description": "Мчитесь по дорогам от души",
+  "advancements.qianmospeed.first_step.title": "Быстрый как ветер",
+  "advancements.qianmospeed.first_step.description": "Сделайте первый шаг в путешествие"
 }

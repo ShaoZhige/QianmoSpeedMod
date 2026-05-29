@@ -35,6 +35,10 @@ public class SpeedModConfig {
 
     // 阡陌交通集成开关
     public static final ForgeConfigSpec.BooleanValue ENABLE_ROADWEAVER_INTEGRATION;
+    // RoadWeaver 速度分级倍率
+    public static final ForgeConfigSpec.DoubleValue RW_HIGHWAY_SPEED_MULTIPLIER;
+    public static final ForgeConfigSpec.DoubleValue RW_COMPLETED_ROAD_SPEED_MULTIPLIER;
+    public static final ForgeConfigSpec.DoubleValue RW_PLANNED_ROAD_SPEED_MULTIPLIER;
 
     // 道路检测模式枚举
     public enum RoadDetectionMode {
@@ -155,9 +159,37 @@ public class SpeedModConfig {
                 .comment(
                         "启用阡陌交通（RoadWeaver）集成，读取规划数据优化检测",
                         "Enable RoadWeaver integration to read planning data for optimized detection",
-                        "默认/Default: false")
-                .define("enableRoadWeaverIntegration", false);
-
+                        "默认开启，无 RoadWeaver 时自动降级为普通检测",
+                        "Default ON, auto-fallback to standard detection when RoadWeaver is absent",
+                        "默认/Default: true")
+                .define("enableRoadWeaverIntegration", true);
+        RW_HIGHWAY_SPEED_MULTIPLIER = builder
+                .comment(
+                        "高速公路速度倍率",
+                        "Highway speed multiplier",
+                        "当玩家在 RoadWeaver 高速公路上时的速度加成",
+                        "Speed boost when player is on RoadWeaver highway",
+                        "范围/Range: 1.0 - 5.0",
+                        "默认/Default: 2.0")
+                .defineInRange("highwaySpeedMultiplier", 2.0, 1.0, 5.0);
+        RW_COMPLETED_ROAD_SPEED_MULTIPLIER = builder
+                .comment(
+                        "已完成道路速度倍率",
+                        "Completed road speed multiplier",
+                        "当玩家在 RoadWeaver 已完成的道路时的速度加成",
+                        "Speed boost when player is on completed RoadWeaver road",
+                        "范围/Range: 1.0 - 5.0",
+                        "默认/Default: 1.6")
+                .defineInRange("completedRoadSpeedMultiplier", 1.6, 1.0, 5.0);
+        RW_PLANNED_ROAD_SPEED_MULTIPLIER = builder
+                .comment(
+                        "规划中道路速度倍率",
+                        "Planned road speed multiplier",
+                        "当玩家在 RoadWeaver 规划中的区块时的速度加成",
+                        "Speed boost when player is in RoadWeaver planned chunk",
+                        "范围/Range: 1.0 - 3.0",
+                        "默认/Default: 1.2")
+                .defineInRange("plannedRoadSpeedMultiplier", 1.2, 1.0, 3.0);
         builder.pop();
 
         // ========== 基础模式道路方块配置 ==========
@@ -214,6 +246,18 @@ public class SpeedModConfig {
 
     public static boolean isRoadWeaverIntegrationEnabled() {
         return ENABLE_ROADWEAVER_INTEGRATION.get();
+    }
+
+    public static double getRWHighwaySpeedMultiplier() {
+        return RW_HIGHWAY_SPEED_MULTIPLIER.get();
+    }
+
+    public static double getRWCompletedRoadSpeedMultiplier() {
+        return RW_COMPLETED_ROAD_SPEED_MULTIPLIER.get();
+    }
+
+    public static double getRWPlannedRoadSpeedMultiplier() {
+        return RW_PLANNED_ROAD_SPEED_MULTIPLIER.get();
     }
 
     // 速度加成配置
@@ -337,7 +381,8 @@ public class SpeedModConfig {
                         "Multipliers=[%.2f, %.2f, %.2f], " +
                         "Advanced=%s, Mode=%s, " +
                         "Directional=%s (min=%d, max=%d), " +
-                        "BasicBlocks=%d, AdvancedBlocks=%d",
+                        "BasicBlocks=%d, AdvancedBlocks=%d, " +
+                        "RW集成=%s (公路=%.2fx, 道路=%.2fx, 规划=%.2fx)",
                 isDebugMessagesEnabled(),
                 isLoginMessagesEnabled(),
                 isSpeedEffectMessagesEnabled(),
@@ -353,7 +398,11 @@ public class SpeedModConfig {
                 getMinDirectionalLength(),
                 getMaxDirectionalLength(),
                 getBasicRoadBlockIds().size(),
-                getAdvancedRoadBlockIds().size());
+                getAdvancedRoadBlockIds().size(),
+                isRoadWeaverIntegrationEnabled() ? "启用" : "禁用",
+                getRWHighwaySpeedMultiplier(),
+                getRWCompletedRoadSpeedMultiplier(),
+                getRWPlannedRoadSpeedMultiplier());
     }
 
     // ========== 🔥 调试方法：打印配置状态 ==========

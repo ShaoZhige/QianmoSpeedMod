@@ -39,6 +39,14 @@ public class BasicEventHandler {
     private static final Map<UUID, Integer> playerStableSpeedLevels = new HashMap<>();
     private static final Map<UUID, AirborneState> playerAirborneStates = new HashMap<>();
     private static final Map<UUID, Boolean> playerPermanentSpeedActive = new HashMap<>();
+    // RoadWeaver 道路类型追踪
+    private static final Map<UUID, AdvancedRoadHandler.RoadContext> playerRWContext = new HashMap<>();
+    // 成就追踪：是否已授予"健步如飞"
+    private static final Set<UUID> grantedFirstStep = new HashSet<>();
+
+    // 定期清理：每 5 分钟清理一次过期条目
+    private static long lastStaleCleanupTick = 0;
+    private static final long STALE_CLEANUP_INTERVAL = 6000; // 5 minutes @ 20 TPS
 
     // UUID
     private static final UUID TRAVEL_BLESSINGS_MODIFIER_UUID = UUID
@@ -46,7 +54,35 @@ public class BasicEventHandler {
     private static final UUID PERMANENT_SPEED_MODIFIER_UUID = UUID
             .nameUUIDFromBytes((QianmoSpeedMod.MODID + ":permanent_road_speed_modifier").getBytes());
 
-    // ==========工具方法：根据玩家Y坐标获取目标方块Y==========
+    // ========== RoadWeaver 倍率计算 ==========
+    /**
+     * 根据 RoadWeaver 道路类型返回对应的速度倍率
+     * 非 RW 道路返回 1.0（不影响原逻辑）
+     */
+    private static double getRoadWeaverMultiplier(AdvancedRoadHandler.RoadContext context) {
+        return switch (context) {
+            case HIGHWAY -> SpeedModConfig.getRWHighwaySpeedMultiplier();
+            case COMPLETED_ROAD -> SpeedModConfig.getRWCompletedRoadSpeedMultiplier();
+            case PLANNED -> SpeedModConfig.getRWPlannedRoadSpeedMultiplier();
+            default -> 1.0;
+        };
+    }
+
+    /**
+     * 尝试授予"健步如飞"成就（仅首次）
+     */
+    private static void tryGrantFirstStepAdvancement(Player player) {
+        UUID playerId = player.getUUID();
+        if (grantedFirstStep.contains(playerId)) return;
+        if (!(player instanceof ServerPlayer serverPlayer)) return;
+
+        var adv = serverPlayer.getServer().getAdvancements()
+                .getAdvancement(new net.minecraft.resources.ResourceLocation(QianmoSpeedMod.MODID, "first_step"));
+        if (adv != null) {
+            serverPlayer.getAdvancements().award(adv, "first_speed");
+            grantedFirstStep.add(playerId);
+        }
+    }
     /**
      * 根据玩家的精确 Y 坐标获取脚下的方块位置
      * 
@@ -242,6 +278,41 @@ public class BasicEventHandler {
         lastEnchantmentCheckTicks.remove(playerId);
         lastPermanentCheckTicks.remove(playerId);
         playerAirborneStates.remove(playerId);
+        playerRWContext.remove(playerId);
+        // 注意：不清理 grantedFirstStep，成就只授予一次，跨会话保持
+    }
+
+    /**
+     * 定期清理已离线的玩家的过期状态条目，防止内存泄漏
+     */
+    private static void cleanupStaleEntries(Level level) {
+        if (!(level instanceof ServerLevel serverLevel)) return;
+
+        Set<UUID> onlinePlayers = new HashSet<>();
+        for (ServerPlayer sp : serverLevel.getServer().getPlayerList().getPlayers()) {
+            onlinePlayers.add(sp.getUUID());
+        }
+
+        int removed = 0;
+        removed += removeOfflineEntries(playerSpeedLevels, onlinePlayers);
+        removed += removeOfflineEntries(playerStableSpeedLevels, onlinePlayers);
+        removed += removeOfflineEntries(playerPermanentSpeedActive, onlinePlayers);
+        removed += removeOfflineEntries(lastEnchantmentCheckTicks, onlinePlayers);
+        removed += removeOfflineEntries(lastPermanentCheckTicks, onlinePlayers);
+        removed += removeOfflineEntries(playerAirborneStates, onlinePlayers);
+        removed += removeOfflineEntries(playerRWContext, onlinePlayers);
+        // 不清理 grantedFirstStep：用 Set<UUID> 而非 Map，需特殊处理
+        grantedFirstStep.removeIf(uuid -> !onlinePlayers.contains(uuid));
+
+        if (removed > 0 && SpeedModConfig.isDebugMessagesEnabled()) {
+            QianmoSpeedMod.LOGGER.debug("清理了 {} 条过期玩家状态", removed);
+        }
+    }
+
+    private static <V> int removeOfflineEntries(Map<UUID, V> map, Set<UUID> onlinePlayers) {
+        int before = map.size();
+        map.keySet().removeIf(uuid -> !onlinePlayers.contains(uuid));
+        return before - map.size();
     }
 
     // ========== 属性修饰器工具方法 ==========
@@ -273,7 +344,12 @@ public class BasicEventHandler {
 
     // ========== 常驻加速核心方法 ==========
     private static void applyPermanentSpeedEffect(Player player) {
-        double multiplier = SpeedModConfig.getPermanentSpeedMultiplier();
+        UUID playerId = player.getUUID();
+        double baseMultiplier = SpeedModConfig.getPermanentSpeedMultiplier();
+        // RoadWeaver 加成：取基础倍率和 RW 倍率中较高者
+        AdvancedRoadHandler.RoadContext rwCtx = playerRWContext.getOrDefault(playerId, AdvancedRoadHandler.RoadContext.NONE);
+        double rwMult = getRoadWeaverMultiplier(rwCtx);
+        double multiplier = Math.max(baseMultiplier, rwMult);
         double speedBonus = multiplier - 1.0;
 
         AttributeInstance movementSpeed = player.getAttribute(Attributes.MOVEMENT_SPEED);
@@ -281,8 +357,8 @@ public class BasicEventHandler {
             return;
 
         if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("★★★★★ 【常驻加速】应用！玩家={}, 倍率={}, 加成={}%",
-                    player.getName().getString(), multiplier, (int) (speedBonus * 100));
+            QianmoSpeedMod.LOGGER.debug("★★★★★ 【常驻加速】应用！玩家={}, 基础倍率={}, RW类型={}, RW倍率={}, 最终倍率={}, 加成={}%",
+                    player.getName().getString(), baseMultiplier, rwCtx, rwMult, multiplier, (int) (speedBonus * 100));
         }
 
         AttributeModifier speedModifier = new AttributeModifier(
@@ -296,7 +372,10 @@ public class BasicEventHandler {
         }
 
         movementSpeed.addTransientModifier(speedModifier);
-        playerPermanentSpeedActive.put(player.getUUID(), true);
+        playerPermanentSpeedActive.put(playerId, true);
+
+        // 首次加速 → 授予成就
+        tryGrantFirstStepAdvancement(player);
     }
 
     private static void removePermanentSpeedEffect(Player player) {
@@ -392,7 +471,19 @@ public class BasicEventHandler {
 
     // ========== 附魔加速核心方法 ==========
     private static void applySpeedEffect(Player player, int level) {
-        double multiplier = SpeedModConfig.getSpeedMultiplier(level);
+        double baseMultiplier = SpeedModConfig.getSpeedMultiplier(level);
+        applySpeedEffectWithMultiplier(player, baseMultiplier, level);
+    }
+
+    /**
+     * 带 RoadWeaver 倍率的附魔加速版本
+     */
+    private static void applySpeedEffectWithMultiplier(Player player, double baseMultiplier, int level) {
+        UUID playerId = player.getUUID();
+        // RoadWeaver 加成：取基础倍率和 RW 倍率中较高者
+        AdvancedRoadHandler.RoadContext rwCtx = playerRWContext.getOrDefault(playerId, AdvancedRoadHandler.RoadContext.NONE);
+        double rwMult = getRoadWeaverMultiplier(rwCtx);
+        double multiplier = Math.max(baseMultiplier, rwMult);
         double speedBonus = multiplier - 1.0;
 
         AttributeInstance movementSpeed = player.getAttribute(Attributes.MOVEMENT_SPEED);
@@ -400,7 +491,6 @@ public class BasicEventHandler {
             return;
 
         // 附魔生效时，强制移除常驻加速
-        UUID playerId = player.getUUID();
         if (playerPermanentSpeedActive.getOrDefault(playerId, false)) {
             removePermanentSpeedEffect(player);
             playerPermanentSpeedActive.put(playerId, false);
@@ -421,9 +511,12 @@ public class BasicEventHandler {
 
         movementSpeed.addTransientModifier(speedModifier);
 
+        // 首次加速 → 授予成就
+        tryGrantFirstStepAdvancement(player);
+
         if (SpeedModConfig.isDebugMessagesEnabled()) {
-            QianmoSpeedMod.LOGGER.debug("应用附魔速度: 玩家={}, 等级={}, 加成={}%",
-                    player.getName().getString(), level, (int) (speedBonus * 100));
+            QianmoSpeedMod.LOGGER.debug("应用附魔速度: 玩家={}, 等级={}, 基础倍率={}, RW类型={}, RW倍率={}, 最终倍率={}, 加成={}%",
+                    player.getName().getString(), level, baseMultiplier, rwCtx, rwMult, multiplier, (int) (speedBonus * 100));
         }
     }
 
@@ -467,7 +560,7 @@ public class BasicEventHandler {
     }
 
     // ========== 附魔加速主逻辑（使用统一腾空判断）==========
-    private static boolean checkAndHandleEnchantmentSpeed(Player player, int currentTick) {
+    private static boolean checkAndHandleEnchantmentSpeed(Player player, int currentTick, boolean knownIsOnRoad) {
         UUID playerId = player.getUUID();
 
         Integer lastCheck = lastEnchantmentCheckTicks.get(playerId);
@@ -486,8 +579,8 @@ public class BasicEventHandler {
             if (travelBlessingsEnchantment != null && enchantments.containsKey(travelBlessingsEnchantment)) {
                 int enchantLevel = enchantments.get(travelBlessingsEnchantment);
 
-                // ⭐⭐⭐ 使用脚下检测 ⭐⭐⭐
-                boolean isOnRoad = checkRoadWithMultiLayer(player.level(), player);
+                // 使用传入的道路检测结果，避免重复检测
+                boolean isOnRoad = knownIsOnRoad;
 
                 BlockPos belowPlayer = player.blockPosition().below();
                 updateAirborneState(player, isOnRoad, enchantLevel, belowPlayer);
@@ -576,10 +669,25 @@ public class BasicEventHandler {
         int currentTick = (int) player.level().getGameTime();
         UUID playerId = player.getUUID();
 
+        // 定期清理离线玩家的过期状态（防止内存泄漏）
+        if (currentTick - lastStaleCleanupTick > STALE_CLEANUP_INTERVAL) {
+            cleanupStaleEntries(player.level());
+            lastStaleCleanupTick = currentTick;
+        }
+
         // ========== ⭐⭐⭐ 先检测道路，再决定哪个加速生效 ⭐⭐⭐ ==========
 
         // 1. 先检测是否在道路上 - 只检测脚下
         boolean isOnRoad = checkRoadWithMultiLayer(player.level(), player);
+
+        // 1.5. 检查 RoadWeaver 道路类型
+        // 注意：不在道路上时保留上次的 RW Context，使腾空期间 RW 加成不丢失
+        if (isOnRoad && AdvancedRoadHandler.isAvailable() && player.level() instanceof ServerLevel) {
+            AdvancedRoadHandler.RoadContext rwContext = AdvancedRoadHandler.getRoadContext(
+                    (ServerLevel) player.level(), player.blockPosition());
+            playerRWContext.put(playerId, rwContext);
+        }
+        // 不移除 playerRWContext：腾空维持期间需要保留上次的 RW 道路级别
 
         // 2. 检查玩家是否穿着附魔靴子
         boolean hasEnchantmentBoots = false;
@@ -610,7 +718,7 @@ public class BasicEventHandler {
             handleEnchantmentSpeedImmediate(player, currentTick, enchantmentLevel, isOnRoad);
         } else {
             // 4. 没有附魔或不在道路上，正常处理附魔（可能维持或移除）
-            boolean hasEnchantment = checkAndHandleEnchantmentSpeed(player, currentTick);
+            boolean hasEnchantment = checkAndHandleEnchantmentSpeed(player, currentTick, isOnRoad);
 
             // 5. 只有完全没有附魔时，才处理常驻加速
             if (!hasEnchantment) {

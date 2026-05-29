@@ -126,7 +126,6 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
 
     /**
      * 检查是否是不完整方块
-     */
     private boolean isIncompleteBlock(Level level, BlockPos pos) {
         BlockState state = level.getBlockState(pos);
         String blockId = ForgeRegistries.BLOCKS.getKey(state.getBlock()).toString();
@@ -137,7 +136,8 @@ public class EnhancedRoadDetector implements RoadDetectionFactory.IRoadDetector 
                 blockId.contains("layer") ||
                 blockId.contains("farmland") ||
                 blockId.contains("path");
-    }
+    }     
+     */
 
     /**
      * 检查是否是自然方块类型

@@ -12,5 +12,10 @@
   "qianmospeed.message.login.permanent_speed_priority": " §7(エンチャント優先)",
   
   "qianmospeed.message.login.prefix": "§a[阡陌疾旅] §f",
-  "qianmospeed.message.login.detected_mods": "§7道路Mod検出: "
+  "qianmospeed.message.login.detected_mods": "§7道路Mod検出: ",
+
+  "advancements.qianmospeed.root.title": "阡陌疾旅",
+  "advancements.qianmospeed.root.description": "道路上を思い切り駆け抜けよう",
+  "advancements.qianmospeed.first_step.title": "風の如く",
+  "advancements.qianmospeed.first_step.description": "初めての旅路へ"
 }

@@ -1,6 +1,7 @@
 package com.example.qianmospeed.config;
 
 import com.example.qianmospeed.QianmoSpeedMod;
+import net.minecraftforge.fml.loading.FMLPaths;
 
 /**
  * 配置文件初始化器
@@ -63,7 +64,7 @@ public class ConfigInitializer {
                 blocksValid ? "有效" : "警告");
             
             // ========== 输出配置文件位置 ==========
-            String configPath = System.getProperty("user.dir") + "/config/qianmospeed-common.toml";
+            String configPath = FMLPaths.CONFIGDIR.get().resolve("qianmospeed-common.toml").toString();
             QianmoSpeedMod.LOGGER.info("📁 配置文件位置: {}", configPath);
             
         } catch (Exception e) {

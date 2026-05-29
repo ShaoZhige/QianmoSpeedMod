@@ -12,5 +12,10 @@
   "qianmospeed.message.login.permanent_speed_priority": " §7(附魔优先)",
   
   "qianmospeed.message.login.prefix": "§a[阡陌疾旅] §f",
-  "qianmospeed.message.login.detected_mods": "§7检测到道路模组: "
+  "qianmospeed.message.login.detected_mods": "§7检测到道路模组: ",
+
+  "advancements.qianmospeed.root.title": "阡陌疾旅",
+  "advancements.qianmospeed.root.description": "尽情在道路上驰骋吧",
+  "advancements.qianmospeed.first_step.title": "健步如飞",
+  "advancements.qianmospeed.first_step.description": "第一次踏上旅途"
 }

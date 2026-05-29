@@ -12,5 +12,10 @@
   "qianmospeed.message.login.permanent_speed_priority": " §7(인챈트 우선)",
   
   "qianmospeed.message.login.prefix": "§a[阡陌疾旅] §f",
-  "qianmospeed.message.login.detected_mods": "§7도로 모드 감지: "
+  "qianmospeed.message.login.detected_mods": "§7도로 모드 감지: ",
+
+  "advancements.qianmospeed.root.title": "천맥질려",
+  "advancements.qianmospeed.root.description": "도로 위를 마음껏 달려보세요",
+  "advancements.qianmospeed.first_step.title": "질풍처럼",
+  "advancements.qianmospeed.first_step.description": "첫 여정을 시작하다"
 }

@@ -21,6 +21,11 @@ public class RoadDetectionFactory {
     private static boolean lastAdvancedState = false;
     private static boolean lastRoadWeaverAvailable = false;
 
+    // ========== 单例检测器（避免热路径重复创建）==========
+    private static final BasicRoadDetector BASIC_DETECTOR = new BasicRoadDetector();
+    private static final EnhancedRoadDetectorNoDirection ENHANCED_DETECTOR =
+            new EnhancedRoadDetectorNoDirection();
+
     /**
      * ⭐⭐⭐ 核心方法：根据方块类型动态判断是否在道路上 ⭐⭐⭐
      * 此方法绕过缓存，直接根据方块类型选择检测器
@@ -51,9 +56,8 @@ public class RoadDetectionFactory {
                 QianmoSpeedMod.LOGGER.debug("✓ 方块在高级列表中，使用高级检测器");
             }
 
-            // 创建高级检测器（无方向检测版本，避免误判）
-            EnhancedRoadDetectorNoDirection enhancedDetector = new EnhancedRoadDetectorNoDirection();
-            boolean result = enhancedDetector.isOnRoad(level, pos);
+            // 使用单例高级检测器（无方向检测版本，避免误判）
+            boolean result = ENHANCED_DETECTOR.isOnRoad(level, pos);
 
             if (SpeedModConfig.isDebugMessagesEnabled()) {
                 QianmoSpeedMod.LOGGER.debug("高级检测器结果: {}", result ? "是道路" : "非道路");
@@ -70,7 +74,7 @@ public class RoadDetectionFactory {
                 QianmoSpeedMod.LOGGER.debug("✓ 方块在基础列表中，使用基础检测器");
             }
 
-            BasicRoadDetector basicDetector = new BasicRoadDetector();
+            BasicRoadDetector basicDetector = BASIC_DETECTOR;
 
             // 检查是否启用RoadWeaver集成，启用则使用混合模式
             if (AdvancedRoadHandler.isAvailable() && level instanceof net.minecraft.server.level.ServerLevel) {
